@@ -1,0 +1,3 @@
+[submodule "dspatch"]
+	path = dspatch
+	url = git@github.com:cross-platform/dspatch.git
