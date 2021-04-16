@@ -1,6 +1,5 @@
 #include<interface/EventBoundaryFinderStreamAligned.h>
 void EventBoundaryFinderStreamAligned::Process_(SignalBus const & inputs, SignalBus& outputs){
-    auto in_data_valid = inputs.GetValue<bool>(EventBoundaryFinder::INPUT::IN_FIFO_I1_DATA_VALID);
 
     // Always read from input FIFO
     outputs.SetValue(EventBoundaryFinder::OUTPUT::OUT_FIFO_I1_POP, true);
@@ -9,6 +8,7 @@ void EventBoundaryFinderStreamAligned::Process_(SignalBus const & inputs, Signal
     outputs.SetValue(EventBoundaryFinder::OUTPUT::OUT_FIFO_O1_READ, false);
     outputs.SetValue(EventBoundaryFinder::OUTPUT::OUT_FIFO_O2_READ, false);
 
+    auto in_data_valid = inputs.GetValue<bool>(EventBoundaryFinder::INPUT::IN_FIFO_I1_DATA_VALID);
     if(not in_data_valid) return;
     if(not *in_data_valid) return;
 

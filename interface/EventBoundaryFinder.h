@@ -7,7 +7,10 @@ using namespace std;
 
 class EventBoundaryFinder : public Component {
     public:
-        EventBoundaryFinder(){};
+        EventBoundaryFinder(){
+            SetInputCount_(INPUT::COUNT_IN);
+            SetOutputCount_(OUTPUT::COUNT_OUT);
+        };
 
         // The Boundary finder is interfaced to three FIFOs:
         // 64-bit input words (AURORA blocks) are read from FIFO_I1
@@ -19,6 +22,7 @@ class EventBoundaryFinder : public Component {
             IN_FIFO_I1_DATA=0,     // uint64_t
             IN_FIFO_I1_DATA_VALID, // bool
             IN_FIFO_I1_DATA_EMPTY, // bool
+            COUNT_IN
 
         };
         enum OUTPUT {
@@ -32,6 +36,7 @@ class EventBoundaryFinder : public Component {
             // Second output FIFO (control FIFO)
             OUT_FIFO_O2_READ, // bool
             OUT_FIFO_O2_DATA, // uint64_t
+            COUNT_OUT
 
         };
 };

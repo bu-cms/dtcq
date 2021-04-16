@@ -28,7 +28,7 @@ class FIFO : public Component {
             OUT_EMPTY,      //bool
             COUNT_OUT
         };
-    
+
     protected:
         virtual void Process_(SignalBus const & inputs, SignalBus& outputs) override;
         queue<T> _buffer;
@@ -51,10 +51,16 @@ void FIFO<T>::Process_(SignalBus const & inputs, SignalBus& outputs){
         }
         _buffer.push(*in_data);
     }
-    if(in_pop) {
-        outputs.SetValue(FIFO::OUTPUT::OUT_DATA, _buffer.front());
-        _buffer.pop();
-        outputs.SetValue(FIFO::OUTPUT::OUT_DATA_VALID, 1);
+
+    if(in_pop and *in_pop) {
+        if(_buffer.size()>0) {
+            outputs.SetValue(FIFO::OUTPUT::OUT_DATA, _buffer.front());
+            _buffer.pop();
+            outputs.SetValue(FIFO::OUTPUT::OUT_DATA_VALID, 1);
+        } else {
+            outputs.SetValue(FIFO::OUTPUT::OUT_DATA_VALID, 0);
+        }
+        outputs.SetValue(FIFO::OUTPUT::OUT_EMPTY, _buffer.size());
     } else {
         outputs.SetValue(FIFO::OUTPUT::OUT_DATA_VALID, 0);
     }
