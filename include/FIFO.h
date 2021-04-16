@@ -3,27 +3,27 @@
 using namespace DSPatch;
 using namespace std;
 
-template<class T>
+template<typename T>
 class FIFO : public Component {
     public:
         FIFO();
+
+        enum INPUT {
+            IN_DATA=0, // T
+            IN_POP,    // bool
+            IN_READ,   // bool
+            COUNT_IN
+        };
+        enum OUTPUT {
+            OUT_DATA=0,     // T
+            OUT_DATA_VALID, // bool
+            OUT_EMPTY,      //bool
+            COUNT_OUT
+        };
     
     protected:
         virtual void Process_(SignalBus const & inputs, SignalBus& outputs) override;
         queue<T> _buffer;
-
-        enum INPUT {
-            IN_DATA=0,
-            IN_POP,
-            IN_READ,
-            COUNT_IN
-        };
-        enum OUTPUT {
-            OUT_DATA=0,
-            OUT_DATA_VALID,
-            OUT_EMPTY,
-            COUNT_OUT
-        };
 };
 
 template<typename T>
@@ -31,7 +31,6 @@ FIFO<T>::FIFO() {
     SetInputCount_(FIFO::INPUT::COUNT_IN);
     SetOutputCount_(FIFO::OUTPUT::COUNT_OUT);
 }
-
 
 template<typename T>
 void FIFO<T>::Process_(SignalBus const & inputs, SignalBus& outputs){
