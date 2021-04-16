@@ -3,6 +3,14 @@
 using namespace DSPatch;
 using namespace std;
 
+class FIFO_READ_FAILURE_EXCEPTION: public exception
+{
+  virtual const char* what() const throw()
+  {
+    return "FIFO failed to read input data";
+  }
+};
+
 template<typename T>
 class FIFO : public Component {
     public:
@@ -37,8 +45,10 @@ void FIFO<T>::Process_(SignalBus const & inputs, SignalBus& outputs){
     auto in_data = inputs.GetValue<T>(FIFO::INPUT::IN_DATA);
     auto in_pop  = inputs.GetValue<bool>(FIFO::INPUT::IN_POP);
     auto in_read = inputs.GetValue<bool>(FIFO::INPUT::IN_READ);
-
-    if(in_read){
+    if(in_read and *in_read){
+        if(not in_data) {
+            throw new FIFO_READ_FAILURE_EXCEPTION();
+        }
         _buffer.push(*in_data);
     }
     if(in_pop) {
@@ -48,6 +58,7 @@ void FIFO<T>::Process_(SignalBus const & inputs, SignalBus& outputs){
     } else {
         outputs.SetValue(FIFO::OUTPUT::OUT_DATA_VALID, 0);
     }
+
 
     outputs.SetValue(FIFO::OUTPUT::OUT_EMPTY, _buffer.size()==0);
 }
