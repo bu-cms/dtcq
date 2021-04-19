@@ -9,11 +9,11 @@ using namespace DSPatch;
 typedef FIFO<uint64_t> FIFO64;
 typedef FIFO<uint8_t> FIFO8;
 int main() {
-    auto circuit = std::make_shared<Circuit>();
-    auto fifo_i1 = std::make_shared<FIFO64>();
-    auto fifo_o1 = std::make_shared<FIFO64>();
-    auto fifo_o2 = std::make_shared<FIFO8>();
-    auto ebf     = std::make_shared<EventBoundaryFinderStreamAligned>();
+    auto circuit = std::make_shared<Circuit>(Component::ProcessOrder::OutOfOrder);
+    auto fifo_i1 = std::make_shared<FIFO64>(Component::ProcessOrder::OutOfOrder);
+    auto fifo_o1 = std::make_shared<FIFO64>(Component::ProcessOrder::OutOfOrder);
+    auto fifo_o2 = std::make_shared<FIFO8>(Component::ProcessOrder::OutOfOrder);
+    auto ebf     = std::make_shared<EventBoundaryFinderStreamAligned>(Component::ProcessOrder::OutOfOrder);
     circuit->AddComponent(fifo_i1);
     circuit->AddComponent(fifo_o1);
     circuit->AddComponent(fifo_o2);
