@@ -24,7 +24,7 @@ $(ODIR)/%.o: $(SRCDIR)/%.cc
 
 demo_evtboundary: $(OBJ)
 	$(CC) src/demo_evtboundary.cc -o $(BINDIR)/demo_evtboundary $^ $(CFLAGS) $(LIBS) ./dspatch/build/libDSPatch.so.7 -I./include
-demo_fifo:
+demo_fifo: $(OBJ)
 	$(CC) src/demo_fifo.cc -o $(BINDIR)/demo_fifo $^ $(CFLAGS) $(LIBS) ./dspatch/build/libDSPatch.so.7 -I./include
 
 clean:

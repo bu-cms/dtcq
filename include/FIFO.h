@@ -1,5 +1,7 @@
 #include<DSPatch.h>
+#include<interface/FComponent.h>
 #include<queue>
+#include<iostream>
 using namespace DSPatch;
 using namespace std;
 
@@ -12,7 +14,7 @@ class FIFO_READ_FAILURE_EXCEPTION: public exception
 };
 
 template<typename T>
-class FIFO : public Component {
+class FIFO : public FComponent {
     public:
         FIFO();
 
@@ -29,9 +31,17 @@ class FIFO : public Component {
             COUNT_OUT
         };
 
+        int d_get_buffer_size(){
+            return _buffer.size();
+        }
     protected:
-        virtual void Process_(SignalBus const & inputs, SignalBus& outputs) override;
+        virtual void ProcessInput_(SignalBus const & inputs) override;
+        virtual void ProcessOutput_(SignalBus& outputs) override;
         queue<T> _buffer;
+
+        T out_data;
+        bool out_data_valid;
+        bool out_empty;
 };
 
 template<typename T>
@@ -41,7 +51,12 @@ FIFO<T>::FIFO() {
 }
 
 template<typename T>
-void FIFO<T>::Process_(SignalBus const & inputs, SignalBus& outputs){
+void FIFO<T>::ProcessInput_(SignalBus const & inputs){
+    // Defaults
+    out_data = 0;
+    out_data_valid = 0;
+    out_empty = 0;
+
     auto in_data = inputs.GetValue<T>(FIFO::INPUT::IN_DATA);
     auto in_pop  = inputs.GetValue<bool>(FIFO::INPUT::IN_POP);
     auto in_read = inputs.GetValue<bool>(FIFO::INPUT::IN_READ);
@@ -54,17 +69,18 @@ void FIFO<T>::Process_(SignalBus const & inputs, SignalBus& outputs){
 
     if(in_pop and *in_pop) {
         if(_buffer.size()>0) {
-            outputs.SetValue(FIFO::OUTPUT::OUT_DATA, _buffer.front());
+            out_data = _buffer.front();
             _buffer.pop();
-            outputs.SetValue(FIFO::OUTPUT::OUT_DATA_VALID, 1);
-        } else {
-            outputs.SetValue(FIFO::OUTPUT::OUT_DATA_VALID, 0);
+            out_data_valid = 1;
         }
-        outputs.SetValue(FIFO::OUTPUT::OUT_EMPTY, _buffer.size());
-    } else {
-        outputs.SetValue(FIFO::OUTPUT::OUT_DATA_VALID, 0);
     }
+    out_empty = _buffer.size() == 0;
 
 
-    outputs.SetValue(FIFO::OUTPUT::OUT_EMPTY, _buffer.size()==0);
+}
+template<typename T>
+void FIFO<T>::ProcessOutput_(SignalBus& outputs){
+    outputs.SetValue(FIFO::OUTPUT::OUT_DATA, out_data);
+    outputs.SetValue(FIFO::OUTPUT::OUT_DATA_VALID, out_data_valid);
+    outputs.SetValue(FIFO::OUTPUT::OUT_EMPTY, out_empty);
 }

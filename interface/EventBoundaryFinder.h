@@ -43,7 +43,7 @@ class EventBoundaryFinder : public FComponent {
         uint64_t out_fifo_o1_data;
 
         bool out_fifo_o2_read;
-        uint64_t out_fifo_o2_data;
+        uint8_t out_fifo_o2_data;
 };
 
 

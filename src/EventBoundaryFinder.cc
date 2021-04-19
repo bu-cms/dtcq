@@ -1,3 +1,4 @@
+#include<iostream>
 #include<interface/EventBoundaryFinder.h>
 using namespace DSPatch;
 

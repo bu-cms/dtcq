@@ -1,8 +1,12 @@
+#include<iostream>
 #include<interface/EventBoundaryFinderStreamAligned.h>
 void EventBoundaryFinderStreamAligned::ProcessInput_(SignalBus const & inputs){
     // Default: push no output
     out_fifo_o2_read = false;
     out_fifo_o1_read = false;
+    out_fifo_o1_data = 0;
+    out_fifo_o2_data = 0;
+
     auto in_data_valid = inputs.GetValue<bool>(EventBoundaryFinder::INPUT::IN_FIFO_I1_DATA_VALID);
     if(not in_data_valid) return;
     if(not *in_data_valid) return;

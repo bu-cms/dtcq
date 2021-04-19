@@ -6,10 +6,9 @@ FComponent::FComponent() : Component::Component() {
 
 
 void FComponent::Process_(SignalBus const & inputs, SignalBus& outputs){
+    ProcessOutput_(outputs);
     if(state){
         ProcessInput_(inputs);
-    }else{
-        ProcessOutput_(outputs);
     }
     state = not state;
 }
