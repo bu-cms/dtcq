@@ -8,7 +8,7 @@ SRCDIR=src
 INCDIR=interface
 LIBS=-lm
 
-_OBJ = EventBoundaryFinderStreamAligned.o
+_OBJ = FComponent.o  EventBoundaryFinder.o EventBoundaryFinderStreamAligned.o
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
 
 # Set up output directories

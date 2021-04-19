@@ -2,15 +2,13 @@
 #define EVENTBOUNDARYFINDER_H
 #include<DSPatch.h>
 #include<queue>
+#include<interface/FComponent.h>
 using namespace DSPatch;
 using namespace std;
 
-class EventBoundaryFinder : public Component {
+class EventBoundaryFinder : public FComponent {
     public:
-        EventBoundaryFinder(){
-            SetInputCount_(INPUT::COUNT_IN);
-            SetOutputCount_(OUTPUT::COUNT_OUT);
-        };
+        EventBoundaryFinder();
 
         // The Boundary finder is interfaced to three FIFOs:
         // 64-bit input words (AURORA blocks) are read from FIFO_I1
@@ -27,7 +25,7 @@ class EventBoundaryFinder : public Component {
         };
         enum OUTPUT {
             // Input FIFO
-            OUT_FIFO_I1_POP,  // bool
+            OUT_FIFO_I1_POP=1,  // bool
             
             // First output FIFO (data FIFO)
             OUT_FIFO_O1_READ, // bool
@@ -37,8 +35,17 @@ class EventBoundaryFinder : public Component {
             OUT_FIFO_O2_READ, // bool
             OUT_FIFO_O2_DATA, // uint64_t
             COUNT_OUT
-
         };
+    protected:
+        virtual void ProcessOutput_(SignalBus & outputs) override;
+        bool out_fifo_i1_pop;
+        bool out_fifo_o1_read;
+        uint64_t out_fifo_o1_data;
+
+        bool out_fifo_o2_read;
+        uint64_t out_fifo_o2_data;
 };
 
+
 #endif /* EVENTBOUNDARYFINDER_H */
+
