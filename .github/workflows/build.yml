@@ -14,4 +14,4 @@ jobs:
     - name: build
       run: mkdir build;cd build;cmake ..;make;
     - name: Run Test
-      run: pwd
+      run: ./demo_fifo; ./demo_evtboundary
