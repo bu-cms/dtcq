@@ -11,9 +11,11 @@ jobs:
     - uses: actions/checkout@v2
       with:
         submodules: true
-    - name: dspatch
-      run: ./build_dsp.sh
     - name: build
-      run: make
+      run:
+          - mkdir build
+          - cd build
+          - cmake ..
+          - make
     - name: Run Test
       run: pwd
