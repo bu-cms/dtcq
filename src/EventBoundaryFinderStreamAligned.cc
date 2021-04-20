@@ -1,12 +1,11 @@
+#include<iostream>
 #include<interface/EventBoundaryFinderStreamAligned.h>
-void EventBoundaryFinderStreamAligned::Process_(SignalBus const & inputs, SignalBus& outputs){
-
-    // Always read from input FIFO
-    outputs.SetValue(EventBoundaryFinder::OUTPUT::OUT_FIFO_I1_POP, true);
-
-    // Default situation: Do not write to output FIFOs.
-    outputs.SetValue(EventBoundaryFinder::OUTPUT::OUT_FIFO_O1_READ, false);
-    outputs.SetValue(EventBoundaryFinder::OUTPUT::OUT_FIFO_O2_READ, false);
+void EventBoundaryFinderStreamAligned::ProcessInput_(SignalBus const & inputs){
+    // Default: push no output
+    out_fifo_o2_read = false;
+    out_fifo_o1_read = false;
+    out_fifo_o1_data = 0;
+    out_fifo_o2_data = 0;
 
     auto in_data_valid = inputs.GetValue<bool>(EventBoundaryFinder::INPUT::IN_FIFO_I1_DATA_VALID);
     if(not in_data_valid) return;
@@ -15,10 +14,9 @@ void EventBoundaryFinderStreamAligned::Process_(SignalBus const & inputs, Signal
     auto in_data = inputs.GetValue<uint64_t>(EventBoundaryFinder::INPUT::IN_FIFO_I1_DATA);
     if(not in_data) return;
 
-
     // Fill output data FIFO
-    outputs.SetValue(EventBoundaryFinder::OUTPUT::OUT_FIFO_O1_DATA, *in_data);
-    outputs.SetValue(EventBoundaryFinder::OUTPUT::OUT_FIFO_O1_READ, true);
+    out_fifo_o1_data = *in_data;
+    out_fifo_o1_read = true;
 
     // Fill output control FIFO
     uint8_t control_word = 0;
@@ -31,9 +29,7 @@ void EventBoundaryFinderStreamAligned::Process_(SignalBus const & inputs, Signal
         control_word |= ((uint8_t) 1) << 6;
     }
 
-
-    outputs.SetValue(EventBoundaryFinder::OUTPUT::OUT_FIFO_O2_DATA, control_word);
-    outputs.SetValue(EventBoundaryFinder::OUTPUT::OUT_FIFO_O2_READ, true);
-
+    out_fifo_o2_data = control_word;
+    out_fifo_o2_read = true;
 
 };
