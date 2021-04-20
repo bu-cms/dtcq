@@ -12,10 +12,6 @@ jobs:
       with:
         submodules: true
     - name: build
-      run:
-          - mkdir build
-          - cd build
-          - cmake ..
-          - make
+      run: mkdir build;cd build;cmake ..;make;
     - name: Run Test
       run: pwd
