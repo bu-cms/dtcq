@@ -6,14 +6,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    # - name: Install gtest manually
-    #   run: sudo apt-get install libgtest-dev && cd /usr/src/gtest && sudo cmake CMakeLists.txt && sudo make && sudo cp *.a /usr/lib && sudo ln -s /usr/lib/libgtest.a /usr/local/lib/libgtest.a && sudo ln -s /usr/lib/libgtest_main.a /usr/local/lib/libgtest_main.a
     - uses: actions/checkout@v2
       with:
         submodules: true
-    - name: dspatch
-      run: ./build_dsp.sh
     - name: build
-      run: make
+      run: mkdir build;cd build;cmake ..;make;
     - name: Run Test
-      run: pwd
+      run: ./build/demo_fifo; ./build/demo_evtboundary
