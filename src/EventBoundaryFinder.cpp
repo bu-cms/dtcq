@@ -7,7 +7,7 @@ EventBoundaryFinder::EventBoundaryFinder() {
     SetOutputCount_(OUTPUT::COUNT_OUT);
 };
 
-void EventBoundaryFinder::ProcessOutput_(SignalBus & outputs){
+void EventBoundaryFinder::PreProcess_(SignalBus const & inputs, SignalBus& outputs){
     outputs.SetValue(EventBoundaryFinder::OUTPUT::OUT_FIFO_I1_POP, out_fifo_i1_pop);
 
     outputs.SetValue(EventBoundaryFinder::OUTPUT::OUT_FIFO_O1_DATA, out_fifo_o1_data);

@@ -1,6 +1,6 @@
 #include<iostream>
 #include<interface/EventBoundaryFinderStreamAligned.h>
-void EventBoundaryFinderStreamAligned::ProcessInput_(SignalBus const & inputs){
+void EventBoundaryFinderStreamAligned::Process_(SignalBus const & inputs, SignalBus& outputs){
     // Default: push no output
     out_fifo_o2_read = false;
     out_fifo_o1_read = false;

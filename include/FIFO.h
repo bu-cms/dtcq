@@ -1,5 +1,4 @@
 #include<DSPatch.h>
-#include<interface/FComponent.h>
 #include<queue>
 #include<iostream>
 using namespace DSPatch;
@@ -14,7 +13,7 @@ class FIFO_READ_FAILURE_EXCEPTION: public exception
 };
 
 template<typename T>
-class FIFO : public FComponent {
+class FIFO : public Component {
     public:
         FIFO();
 
@@ -34,9 +33,9 @@ class FIFO : public FComponent {
         int d_get_buffer_size(){
             return _buffer.size();
         }
+        virtual void PreProcess_(SignalBus const & inputs, SignalBus& outputs) override;
+        virtual void Process_(SignalBus const & inputs, SignalBus& outputs) override;
     protected:
-        virtual void ProcessInput_(SignalBus const & inputs) override;
-        virtual void ProcessOutput_(SignalBus& outputs) override;
         queue<T> _buffer;
 
         T out_data;
@@ -51,7 +50,7 @@ FIFO<T>::FIFO() {
 }
 
 template<typename T>
-void FIFO<T>::ProcessInput_(SignalBus const & inputs){
+void FIFO<T>::Process_(SignalBus const & inputs, SignalBus& outputs){
     // Defaults
     out_data = 0;
     out_data_valid = 0;
@@ -79,7 +78,7 @@ void FIFO<T>::ProcessInput_(SignalBus const & inputs){
 
 }
 template<typename T>
-void FIFO<T>::ProcessOutput_(SignalBus& outputs){
+void FIFO<T>::PreProcess_(SignalBus const & inputs, SignalBus& outputs){
     outputs.SetValue(FIFO::OUTPUT::OUT_DATA, out_data);
     outputs.SetValue(FIFO::OUTPUT::OUT_DATA_VALID, out_data_valid);
     outputs.SetValue(FIFO::OUTPUT::OUT_EMPTY, out_empty);

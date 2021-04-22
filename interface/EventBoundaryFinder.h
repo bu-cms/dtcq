@@ -2,11 +2,10 @@
 #define EVENTBOUNDARYFINDER_H
 #include<DSPatch.h>
 #include<queue>
-#include<interface/FComponent.h>
 using namespace DSPatch;
 using namespace std;
 
-class EventBoundaryFinder : public FComponent {
+class EventBoundaryFinder : public Component {
     public:
         EventBoundaryFinder();
 
@@ -36,8 +35,8 @@ class EventBoundaryFinder : public FComponent {
             OUT_FIFO_O2_DATA, // uint64_t
             COUNT_OUT
         };
+        virtual void PreProcess_(SignalBus const & inputs, SignalBus& outputs) override;
     protected:
-        virtual void ProcessOutput_(SignalBus & outputs) override;
         bool out_fifo_i1_pop;
         bool out_fifo_o1_read;
         uint64_t out_fifo_o1_data;
