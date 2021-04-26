@@ -93,7 +93,12 @@ protected:
     bool value_;
 };
 
-int main() {
+int main(int argc, char* argv[]) {
+    int NFifo = 100;
+	if (argc>0) NFifo = atoi(argv[1]);
+    int NCycles = 1000;
+	if (argc>1) NCycles = atoi(argv[2]);
+
     auto circuit = std::make_shared<Circuit>();
     auto player  = std::make_shared<DataPlayer>();
     auto regconst = std::make_shared<RegisterConst>(true);
@@ -106,7 +111,6 @@ int main() {
     circuit->AddComponent(printer1);
     circuit->AddComponent(printer2);
     circuit->ConnectOutToIn(player, 0, printer1, 0);
-    int NFifo = 100;
     std::shared_ptr<FIFO64> fifo_array[NFifo]; 
     for( int i = 0; i < NFifo; i++)
     {
@@ -130,7 +134,6 @@ int main() {
 
     time_t t_start;
     time_t t_end;
-    int NCycles = 1000;
     time(&t_start);
     for ( int i = 0; i < NCycles; ++i )
     {
