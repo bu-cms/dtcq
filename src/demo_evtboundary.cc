@@ -9,50 +9,50 @@ using namespace DSPatch;
 typedef FIFO<uint64_t> FIFO64;
 typedef FIFO<uint8_t> FIFO8;
 
-class DataPlayer final : public FComponent
+class DataPlayer final : public Component
 {
 public:
-    DataPlayer() : FComponent()
+    DataPlayer() : Component()
     {
         SetOutputCount_( 2 );
     }
-
-protected:
-    uint64_t out_data;
-    bool out_read;
-    virtual void ProcessOutput_(SignalBus & outputs) override {
+    virtual void PreProcess_(SignalBus const & inputs, SignalBus& outputs) override {
         outputs.SetValue(0, out_data);
         // cout << "DATA " << *outputs.GetValue<uint64_t>(0) << endl;
         outputs.SetValue(1, out_read);
     }
-    virtual void ProcessInput_(SignalBus const & inputs) override {
+    virtual void Process_(SignalBus const & inputs, SignalBus& outputs) override {
         out_data = uint64_t(rand());
         out_read = true;
     };
 
+protected:
+    uint64_t out_data;
+    bool out_read;
+
 };
 
 template<typename T>
-class DataPrinter final : public FComponent{
+class DataPrinter final : public Component{
     public:
-        DataPrinter(string input_tag) : FComponent() {
+        DataPrinter(string input_tag) : Component() {
             tag = input_tag;
             SetInputCount_(1);
             SetOutputCount_(0);
         };
-
-    protected:
-        string tag;
-        T data;
-        virtual void ProcessOutput_(SignalBus & outputs) override {
+        virtual void PreProcess_(SignalBus const & inputs, SignalBus& outputs) override {
             cout << tag << " " << int(data) << endl;
         };
-        virtual void ProcessInput_(SignalBus const & inputs) override {
+        virtual void Process_(SignalBus const & inputs, SignalBus& outputs) override {
             auto ptr = inputs.GetValue<T>(0);
             if(ptr){
                 data = *ptr;
             }
         };
+
+    protected:
+        string tag;
+        T data;
 };
 
 int main() {

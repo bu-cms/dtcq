@@ -5,8 +5,6 @@
 class EventBoundaryFinderStreamAligned : public EventBoundaryFinder {
     public:
         EventBoundaryFinderStreamAligned(){};
-    protected:
-        virtual void ProcessInput_(SignalBus const & inputs) override;
-
+        virtual void Process_(SignalBus const & inputs, SignalBus& outputs) override;
 };
 #endif /* EVENTBOUNDARYFINDERSTREAMALIGNED_H */
