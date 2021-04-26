@@ -94,10 +94,11 @@ protected:
 };
 
 int main(int argc, char* argv[]) {
+	cout<<argc<<endl;
     int NFifo = 100;
-	if (argc>0) NFifo = atoi(argv[1]);
+	if (argc>1) NFifo = atoi(argv[1]);
     int NCycles = 1000;
-	if (argc>1) NCycles = atoi(argv[2]);
+	if (argc>2) NCycles = atoi(argv[2]);
 
     auto circuit = std::make_shared<Circuit>();
     auto player  = std::make_shared<DataPlayer>();
