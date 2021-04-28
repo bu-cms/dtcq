@@ -11,5 +11,9 @@ jobs:
         submodules: true
     - name: build
       run: mkdir build;cd build;cmake ..;make;
-    - name: Run Test
-      run: ./build/demo_fifo; ./build/demo_evtboundary
+    - name: Run Test fifo data verification
+      run: ./build/demo_fifo_verification
+    - name: Run Test fifo speed test
+      run: ./build/demo_multiple_fifo
+    - name: Run Test event boundary finder
+      run: ./build/demo_evtboundary
