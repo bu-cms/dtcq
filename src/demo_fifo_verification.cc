@@ -131,20 +131,20 @@ int main(int argc, char* argv[]) {
     auto circuit = std::make_shared<Circuit>();
     auto player  = std::make_shared<HalfTimeDataPlayer>();
     auto fifo    = std::make_shared<FIFO64>();
-    auto rnd     = std::make_shared<HalfTimeTrue>();
+    //auto rnd     = std::make_shared<HalfTimeTrue>();
     auto checker = std::make_shared<FIFOChecker>();
 
     circuit->AddComponent(player);
     circuit->AddComponent(fifo);
     circuit->AddComponent(checker);
-    circuit->AddComponent(rnd);
+    //circuit->AddComponent(rnd);
     circuit->ConnectOutToIn(player, 0, fifo, FIFO64::INPUT::IN_DATA);
     circuit->ConnectOutToIn(player, 1, fifo, FIFO64::INPUT::IN_READ);
     circuit->ConnectOutToIn(player, 0, checker, FIFOChecker::INPUT::IN_SRC_DATA);
     circuit->ConnectOutToIn(player, 1, checker, FIFOChecker::INPUT::IN_SRC_VALID);
-    //circuit->ConnectOutToIn(checker, FIFOChecker::OUTPUT::OUT_FIFO_READ, fifo, FIFO64::INPUT::IN_POP);
-    circuit->ConnectOutToIn(rnd, 0, fifo, FIFO64::INPUT::IN_POP);
-    circuit->ConnectOutToIn(rnd, 1, checker, FIFOChecker::INPUT::IN_RND_READ);
+    circuit->ConnectOutToIn(checker, FIFOChecker::OUTPUT::OUT_FIFO_READ, fifo, FIFO64::INPUT::IN_POP);
+    //circuit->ConnectOutToIn(rnd, 0, fifo, FIFO64::INPUT::IN_POP);
+    //circuit->ConnectOutToIn(rnd, 1, checker, FIFOChecker::INPUT::IN_RND_READ);
     circuit->ConnectOutToIn(fifo, FIFO64::OUTPUT::OUT_DATA_VALID, checker, FIFOChecker::INPUT::IN_FIFO_VALID);
     circuit->ConnectOutToIn(fifo, FIFO64::OUTPUT::OUT_DATA, checker, FIFOChecker::INPUT::IN_FIFO_DATA);
     circuit->ConnectOutToIn(fifo, FIFO64::OUTPUT::OUT_EMPTY, checker, FIFOChecker::INPUT::IN_FIFO_EMPTY);
