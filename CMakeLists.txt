@@ -10,7 +10,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wl,--no-as-needed -ldl -lpthread")
 # list executables here to be compiled
 set(EXECUTABLES
 	demo_evtboundary
-	demo_fifo
+	demo_fifo_verification
+	demo_multiple_fifo
 	)
 
 include(FetchContent)
