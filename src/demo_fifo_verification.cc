@@ -76,11 +76,11 @@ public:
         SetOutputCount_(OUTPUT::COUNT_OUT);
     }
     virtual void PreProcess_(SignalBus const & inputs, SignalBus& outputs) override {
-		//read_in_last_tick = read_in_this_tick;
-		//read_in_this_tick = ( rand()%2==0 );
-		//if (read_in_this_tick) outputs.SetValue(OUTPUT::OUT_FIFO_READ, 1);
-		//else outputs.SetValue(OUTPUT::OUT_FIFO_READ, 0);
-		outputs.SetValue(OUTPUT::OUT_FIFO_READ, 1);
+		read_in_last_tick = read_in_this_tick;
+		read_in_this_tick = ( rand()%2==0 );
+		if (read_in_this_tick) outputs.SetValue(OUTPUT::OUT_FIFO_READ, 1);
+		else outputs.SetValue(OUTPUT::OUT_FIFO_READ, 0);
+		//outputs.SetValue(OUTPUT::OUT_FIFO_READ, 1);
         return;
     }
     virtual void Process_(SignalBus const & inputs, SignalBus& outputs) override {
@@ -118,8 +118,8 @@ public:
     };
 protected:
 	std::queue<uint64_t> src_data;
-	bool read_in_this_tick = true;
-	bool read_in_last_tick = true;
+	bool read_in_this_tick = false;
+	bool read_in_last_tick = false;
 	int tick_counter = 0;
 };
 
@@ -137,6 +137,7 @@ int main(int argc, char* argv[]) {
     circuit->AddComponent(player);
     circuit->AddComponent(fifo);
     circuit->AddComponent(checker);
+    circuit->AddComponent(rnd);
     circuit->ConnectOutToIn(player, 0, fifo, FIFO64::INPUT::IN_DATA);
     circuit->ConnectOutToIn(player, 1, fifo, FIFO64::INPUT::IN_READ);
     circuit->ConnectOutToIn(player, 0, checker, FIFOChecker::INPUT::IN_SRC_DATA);
