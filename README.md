@@ -2,7 +2,7 @@
 
 ## Setup
 
-# General
+### General
 ```bash
 BRANCH="dtcq" # Change to whatever branch / tag you need
 git clone --recursive git@github.com:bu-cms/dtcq.git -b "${BRANCH}"
@@ -14,7 +14,7 @@ cmake ..
 make
 ```
 
-# On lxplus
+### On lxplus
 
 Preface the setup above by sourcing a recent LCG environment of your choice. E.g.:
 
