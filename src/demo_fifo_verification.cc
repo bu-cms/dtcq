@@ -34,23 +34,6 @@ protected:
 
 };
 
-class HalfTimeTrue final : public Component
-{
-public:
-    HalfTimeTrue() : Component()
-    {
-        SetOutputCount_( 2 );
-    }
-    virtual void PreProcess_(SignalBus const & inputs, SignalBus& outputs) override {
-		bool rnd = (rand()%2==0);
-        outputs.SetValue(0, rnd);
-        outputs.SetValue(1, rnd);
-    }
-    virtual void Process_(SignalBus const & inputs, SignalBus& outputs) override {
-		return;
-    }
-};
-
 // 50% chance read data from FIFO
 // always read from source generator if available
 // compare the data from FIFO with data from source
@@ -63,7 +46,6 @@ public:
         IN_FIFO_DATA,    // T
         IN_SRC_VALID,   // bool
         IN_SRC_DATA,   // T
-        IN_RND_READ,   // bool
         COUNT_IN
     };
     enum OUTPUT {
@@ -78,9 +60,7 @@ public:
     virtual void PreProcess_(SignalBus const & inputs, SignalBus& outputs) override {
 		read_in_last_tick = read_in_this_tick;
 		read_in_this_tick = ( rand()%2==0 );
-		if (read_in_this_tick) outputs.SetValue(OUTPUT::OUT_FIFO_READ, 1);
-		else outputs.SetValue(OUTPUT::OUT_FIFO_READ, 0);
-		//outputs.SetValue(OUTPUT::OUT_FIFO_READ, 1);
+		outputs.SetValue(OUTPUT::OUT_FIFO_READ, read_in_this_tick);
         return;
     }
     virtual void Process_(SignalBus const & inputs, SignalBus& outputs) override {
@@ -98,8 +78,6 @@ public:
 		}
 		bool in_fifo_valid = *inputs.GetValue<bool>(INPUT::IN_FIFO_VALID);
 		bool in_fifo_empty = *inputs.GetValue<bool>(INPUT::IN_FIFO_EMPTY);
-		//read_in_last_tick = read_in_this_tick;
-		//read_in_this_tick = *inputs.GetValue<bool>(INPUT::IN_RND_READ);
 		if (in_fifo_valid)
 		{
 			if (src_data.empty()) printf("\tsrc_data empty! something wrong?\n");
@@ -131,20 +109,16 @@ int main(int argc, char* argv[]) {
     auto circuit = std::make_shared<Circuit>();
     auto player  = std::make_shared<HalfTimeDataPlayer>();
     auto fifo    = std::make_shared<FIFO64>();
-    //auto rnd     = std::make_shared<HalfTimeTrue>();
     auto checker = std::make_shared<FIFOChecker>();
 
     circuit->AddComponent(player);
     circuit->AddComponent(fifo);
     circuit->AddComponent(checker);
-    //circuit->AddComponent(rnd);
     circuit->ConnectOutToIn(player, 0, fifo, FIFO64::INPUT::IN_DATA);
     circuit->ConnectOutToIn(player, 1, fifo, FIFO64::INPUT::IN_READ);
     circuit->ConnectOutToIn(player, 0, checker, FIFOChecker::INPUT::IN_SRC_DATA);
     circuit->ConnectOutToIn(player, 1, checker, FIFOChecker::INPUT::IN_SRC_VALID);
     circuit->ConnectOutToIn(checker, FIFOChecker::OUTPUT::OUT_FIFO_READ, fifo, FIFO64::INPUT::IN_POP);
-    //circuit->ConnectOutToIn(rnd, 0, fifo, FIFO64::INPUT::IN_POP);
-    //circuit->ConnectOutToIn(rnd, 1, checker, FIFOChecker::INPUT::IN_RND_READ);
     circuit->ConnectOutToIn(fifo, FIFO64::OUTPUT::OUT_DATA_VALID, checker, FIFOChecker::INPUT::IN_FIFO_VALID);
     circuit->ConnectOutToIn(fifo, FIFO64::OUTPUT::OUT_DATA, checker, FIFOChecker::INPUT::IN_FIFO_DATA);
     circuit->ConnectOutToIn(fifo, FIFO64::OUTPUT::OUT_EMPTY, checker, FIFOChecker::INPUT::IN_FIFO_EMPTY);
