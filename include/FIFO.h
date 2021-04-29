@@ -1,85 +1,43 @@
-#include<DSPatch.h>
+#ifndef FIFO_H
+#define FIFO_H
+#include<include/Component.h>
+#include<include/Ports.h>
 #include<queue>
-#include<iostream>
-using namespace DSPatch;
 using namespace std;
-
-class FIFO_READ_FAILURE_EXCEPTION: public exception
-{
-  virtual const char* what() const throw()
-  {
-    return "FIFO failed to read input data";
-  }
-};
-
 template<typename T>
 class FIFO : public Component {
     public:
-        FIFO();
+        FIFO(){};
 
-        enum INPUT {
-            IN_DATA=0, // T
-            IN_POP,    // bool
-            IN_READ,   // bool
-            COUNT_IN
-        };
-        enum OUTPUT {
-            OUT_DATA=0,     // T
-            OUT_DATA_VALID, // bool
-            OUT_EMPTY,      //bool
-            COUNT_OUT
-        };
+        InputPort<T> in_data;
+        InputPort<bool> in_push_enable;
+        InputPort<bool> in_pop_enable;
 
-        int d_get_buffer_size(){
-            return _buffer.size();
+        OutputPort<T> out_data;
+        OutputPort<bool> out_data_valid;
+        OutputPort<bool> out_empty;
+
+        queue<T> buffer;
+        void tick() {
+            out_data_valid.set_value(false);
+
+            if(in_pop_enable.get_value() and buffer.size()>0){
+                out_data.set_value(buffer.front());
+                buffer.pop();
+                out_data_valid.set_value(true);
+            }
+            if(in_push_enable.get_value()) {
+                buffer.push(in_data.get_value());
+            }
+
+            out_empty.set_value(buffer.size()==0);
         }
-        virtual void PreProcess_(SignalBus const & inputs, SignalBus& outputs) override;
-        virtual void Process_(SignalBus const & inputs, SignalBus& outputs) override;
-    protected:
-        queue<T> _buffer;
-
-        T out_data;
-        bool out_data_valid;
-        bool out_empty;
+        void post_tick(){
+            out_data.propagate();
+            out_data_valid.propagate();
+            out_empty.propagate();
+        }
 };
 
-template<typename T>
-FIFO<T>::FIFO() {
-    SetInputCount_(FIFO::INPUT::COUNT_IN);
-    SetOutputCount_(FIFO::OUTPUT::COUNT_OUT);
-}
 
-template<typename T>
-void FIFO<T>::Process_(SignalBus const & inputs, SignalBus& outputs){
-    // Defaults
-    out_data = 0;
-    out_data_valid = 0;
-    out_empty = 0;
-
-    auto in_data = inputs.GetValue<T>(FIFO::INPUT::IN_DATA);
-    auto in_pop  = inputs.GetValue<bool>(FIFO::INPUT::IN_POP);
-    auto in_read = inputs.GetValue<bool>(FIFO::INPUT::IN_READ);
-    if(in_read and *in_read){
-        if(not in_data) {
-            throw new FIFO_READ_FAILURE_EXCEPTION();
-        }
-        _buffer.push(*in_data);
-    }
-
-    if(in_pop and *in_pop) {
-        if(_buffer.size()>0) {
-            out_data = _buffer.front();
-            _buffer.pop();
-            out_data_valid = 1;
-        }
-    }
-    out_empty = _buffer.size() == 0;
-
-
-}
-template<typename T>
-void FIFO<T>::PreProcess_(SignalBus const & inputs, SignalBus& outputs){
-    outputs.SetValue(FIFO::OUTPUT::OUT_DATA, out_data);
-    outputs.SetValue(FIFO::OUTPUT::OUT_DATA_VALID, out_data_valid);
-    outputs.SetValue(FIFO::OUTPUT::OUT_EMPTY, out_empty);
-}
+#endif /* FIFO_H */

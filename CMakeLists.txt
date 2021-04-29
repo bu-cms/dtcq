@@ -9,9 +9,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wl,--no-as-needed -ldl -lpthread")
 
 # list executables here to be compiled
 set(EXECUTABLES
-	demo_evtboundary
-	demo_fifo_verification
-	demo_multiple_fifo
+	demo_fifo
 	)
 
 include(FetchContent)
@@ -32,9 +30,8 @@ include_directories(
 
 file(GLOB srcs ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
 
-add_subdirectory("dspatch")
 
 foreach( exe ${EXECUTABLES} )
 	add_executable(${exe} ${CMAKE_CURRENT_SOURCE_DIR}/src/${exe}.cc ${srcs})
-	target_link_libraries(${exe} DSPatch)
+	target_link_libraries(${exe})
 endforeach()
