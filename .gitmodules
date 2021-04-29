@@ -1,4 +1,0 @@
-[submodule "dspatch"]
-	path = dspatch
-	url = git@github.com:siqiyyyy/dspatch.git
-	branch = 2021_04_19_pre_tick_and_temporary_output_storage
