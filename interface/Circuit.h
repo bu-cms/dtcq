@@ -2,6 +2,7 @@
 #define CIRCUIT_H
 #include<include/Component.h>
 #include<vector>
+#include<memory>
 
 using namespace std;
 class Circuit {
@@ -9,10 +10,10 @@ class Circuit {
         Circuit(){};
         void tick();
 
-        void add_component(Component * component) {
+        void add_component(std::shared_ptr<Component> component) {
             components.push_back(component);
         }
     protected:
-        vector<Component*> components;
+        vector<std::shared_ptr<Component>> components;
 };
 #endif /* CIRCUIT_H */
