@@ -63,7 +63,8 @@ public:
 			printf("\tNo source data produced.\n");
 		}
 		bool IN_FIFO_VALID = in_fifo_valid.get_value();
-		bool IN_FIFO_EMPTY = in_fifo_empty.get_value();
+		bool FIFO_EMPTY_LAST_TICK = FIFO_EMPTY_THIS_TICK;
+		bool FIFO_EMPTY_THIS_TICK = in_fifo_empty.get_value();
 		if (IN_FIFO_VALID)
 		{
 			if (src_data.empty()) printf("\tsrc_data empty! something wrong?\n");
@@ -75,17 +76,20 @@ public:
 		}
 		else if (READ_IN_LAST_TICK)
 		{
-			if (IN_FIFO_EMPTY) printf("\tWas tring to read from FIFO but FIFO empty. good!\n");
+			if (FIFO_EMPTY_LAST_TICK) printf("\tWas tring to read from FIFO but FIFO empty. good!\n");
 			else printf("\tWas tring to read from FIFO but no data comes out. so bad!\n");
 		}
 		else printf("\tNo data comes out from FIFO and wasn't trying to read. so good!\n");
-		READ_IN_LAST_TICK = ( rand()%2==0 );
-		out_fifo_read.set_value(READ_IN_LAST_TICK);
+		READ_IN_LAST_TICK = READ_IN_THIS_TICK;
+		READ_IN_THIS_TICK = ( rand()%2==0 );
+		out_fifo_read.set_value(READ_IN_THIS_TICK);
     };
 protected:
 	std::queue<uint64_t> src_data;
 	bool READ_IN_THIS_TICK = false;
 	bool READ_IN_LAST_TICK = false;
+	bool FIFO_EMPTY_LAST_TICK = true;
+	bool FIFO_EMPTY_THIS_TICK = true;
 	int tick_counter = 0;
 };
 
