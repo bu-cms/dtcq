@@ -13,3 +13,5 @@ jobs:
       run: mkdir build;cd build;cmake ..;make;
     - name: Run Test fifo speed test
       run: ./build/demo_multiple_fifo
+    - name: Run Test fifo content verification
+      run: ./build/demo_fifo_verification

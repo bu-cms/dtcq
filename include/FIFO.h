@@ -36,6 +36,9 @@ class FIFO : public Component {
 
             out_empty.set_value(buffer.size()==0);
         }
+		int d_get_buffer_size(){
+			return buffer.size();
+		}
 };
 
 
