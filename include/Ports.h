@@ -3,6 +3,12 @@
 
 #include<vector>
 using namespace std;
+
+class Propagatable {
+	public:
+        virtual void propagate() = 0;
+};
+
 template<typename T>
 class Port {
     public:
@@ -22,15 +28,15 @@ class InputPort: public Port<T> {
 
 
 template<typename T>
-class OutputPort: public Port<T> {
+class OutputPort: public Port<T>, public Propagatable {
     public:
         OutputPort(){};
 
         void connect(InputPort<T> * other) {
-            connected_ports->push_back(other);
+            connected_ports.push_back(other);
         }
 
-        void propagate() {
+        virtual void propagate() override{
             for(auto port: connected_ports) {
                 port->set_value(value);
             }

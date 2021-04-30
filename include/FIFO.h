@@ -7,8 +7,6 @@ using namespace std;
 template<typename T>
 class FIFO : public Component {
     public:
-        FIFO(){};
-
         InputPort<T> in_data;
         InputPort<bool> in_push_enable;
         InputPort<bool> in_pop_enable;
@@ -16,6 +14,12 @@ class FIFO : public Component {
         OutputPort<T> out_data;
         OutputPort<bool> out_data_valid;
         OutputPort<bool> out_empty;
+
+        FIFO() {
+			add_output(&out_data);
+			add_output(&out_data_valid);
+			add_output(&out_empty);
+		}
 
         queue<T> buffer;
         void tick() {
@@ -31,11 +35,6 @@ class FIFO : public Component {
             }
 
             out_empty.set_value(buffer.size()==0);
-        }
-        void post_tick(){
-            out_data.propagate();
-            out_data_valid.propagate();
-            out_empty.propagate();
         }
 };
 
