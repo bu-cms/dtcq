@@ -4,7 +4,7 @@
 
 ### General
 ```bash
-BRANCH="standalone" # Change to whatever branch / tag you need
+BRANCH="v0.3" # Change to whatever branch / tag you need
 git clone --recursive git@github.com:bu-cms/dtcq.git -b "${BRANCH}"
 cd dtcq
 mkdir build
