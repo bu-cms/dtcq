@@ -5,7 +5,7 @@
 using namespace std;
 
 class Propagatable {
-	public:
+    public:
         virtual void propagate() = 0;
 };
 
@@ -38,11 +38,10 @@ class OutputPort: public Port<T>, public Propagatable {
 
         virtual void propagate() override{
             for(auto port: connected_ports) {
-                port->set_value(value);
+                port->set_value(Port<T>::value);
             }
         }
     protected:
-        T value;
         vector<InputPort<T>*> connected_ports;
 };
 
