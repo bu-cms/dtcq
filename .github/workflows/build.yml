@@ -15,3 +15,5 @@ jobs:
       run: ./build/demo_multiple_fifo
     - name: Run Test fifo content verification
       run: ./build/demo_fifo_verification
+    - name: Run Test demo event boundary finder
+      run: ./build/demo_evtboundary

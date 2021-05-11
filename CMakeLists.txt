@@ -11,6 +11,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wl,--no-as-needed -ldl -lpthread")
 set(EXECUTABLES
 	demo_fifo_verification
 	demo_multiple_fifo
+	demo_evtboundary
 	)
 
 include(FetchContent)
