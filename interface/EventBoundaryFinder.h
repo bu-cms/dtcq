@@ -11,6 +11,7 @@ class EventBoundaryFinder : public Component {
 		InputPort<uint64_t> in_fifo_i1_data;
 		InputPort<bool> in_fifo_i1_data_valid;
 		InputPort<bool> in_fifo_i1_data_empty;
+		InputPort<bool> in_enable_fifo_i1_data_pop;
         OutputPort<bool> out_fifo_i1_pop ;
         OutputPort<bool> out_fifo_o1_read;
         OutputPort<uint64_t> out_fifo_o1_data;

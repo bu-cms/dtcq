@@ -7,10 +7,11 @@ EventBoundaryFinder::EventBoundaryFinder() {
 	add_output(&out_fifo_o1_data);
 	add_output(&out_fifo_o2_read);
 	add_output(&out_fifo_o2_data);
+	in_enable_fifo_i1_data_pop.set_value(true); // default to true if not controlled by another component
 };
 
 void EventBoundaryFinder::tick() {
-    out_fifo_i1_pop.set_value(true);
+    out_fifo_i1_pop.set_value(in_enable_fifo_i1_data_pop.get_value());
     out_fifo_o2_read.set_value(false);
     out_fifo_o1_read.set_value(false);
     out_fifo_o1_data.set_value(0);
