@@ -12,6 +12,7 @@ set(EXECUTABLES
 	demo_fifo_verification
 	demo_multiple_fifo
 	demo_evtboundary
+	dtc11
 	)
 
 include(FetchContent)
