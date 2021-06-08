@@ -1,4 +1,5 @@
 #include<iostream>
+#include<bitset>
 #include<interface/EventBoundaryFinder.h>
 
 EventBoundaryFinder::EventBoundaryFinder() {
@@ -26,15 +27,21 @@ void EventBoundaryFinder::tick() {
     out_fifo_o1_read.set_value(true);
 
     // Fill output control FIFO
-    uint8_t control_word = 0;
-    // Leading bit in control word indicates new data word
-    control_word |= ((uint8_t) 1) << 7;
+    uint16_t control_word = 0;
+    // Leading bit in control word indicates new event boundary
+    // Second bit indicates event boundary at beginning
+    // 3-8 bit indicate location of event boundary
+    // 9-16 bit is the event tag
 
     // New event indicated by new stream bit
     if(in_data & (((uint64_t)1)<<63)) {
         // Second Leading bit in control word indicates event boundary
-        control_word |= ((uint8_t) 1) << 6;
+        control_word |= ((uint16_t) 3) << 14;
     }
+    bitset<64> b_data(in_data);
+    bitset<16> b_control(control_word);
+    //std::cout<<"EBF: data="<<b_data<<std::endl;
+    //std::cout<<"EBF: control="<<b_control<<std::endl;
 
     out_fifo_o2_data.set_value(control_word);
     out_fifo_o2_read.set_value(true);

@@ -12,7 +12,7 @@
 using namespace std;
 
 typedef FIFO<uint64_t> FIFO64;
-typedef FIFO<uint8_t> FIFO8;
+typedef FIFO<uint16_t> FIFO16;
 
 uint64_t rand64() {
 	std::random_device rd;
@@ -59,11 +59,11 @@ int main() {
     auto player  = std::make_shared<DataPlayer>();
     auto fifo_i1 = std::make_shared<FIFO64>();
     auto fifo_o1 = std::make_shared<FIFO64>();
-    auto fifo_o2 = std::make_shared<FIFO8>();
+    auto fifo_o2 = std::make_shared<FIFO16>();
     auto ebf     = std::make_shared<EventBoundaryFinder>();
 
     auto printer_data  = std::make_shared<DataPrinter<uint64_t>>(string("data"));
-    auto printer_ctrl  = std::make_shared<DataPrinter<uint8_t>>(string("ctrl"));
+    auto printer_ctrl  = std::make_shared<DataPrinter<uint16_t>>(string("ctrl"));
     auto printer_debug  = std::make_shared<DataPrinter<uint64_t>>(string("debug"));
 
     circuit->add_component(player);

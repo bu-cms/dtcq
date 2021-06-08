@@ -16,7 +16,7 @@ class EventBoundaryFinder : public Component {
         OutputPort<bool> out_fifo_o1_read;
         OutputPort<uint64_t> out_fifo_o1_data;
         OutputPort<bool> out_fifo_o2_read;
-        OutputPort<uint8_t> out_fifo_o2_data;
+        OutputPort<uint16_t> out_fifo_o2_data;
 
         EventBoundaryFinder();
 		void tick() override;
