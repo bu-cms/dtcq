@@ -72,7 +72,7 @@ private:
 	uint64_t value;
     const int nominal_ticks_per_word = 20; // assuming all chip has rate of 1.28Gbps, 400M * 64 / 1.28G = 20
     std::vector<int> ticks_per_word; //nominal ticks_per_word divided by e-link-to-chip ratio
-    const int min_ticks_per_event =  485; // 400M / 825k = 484.8, 825k include collision product trigger 750k and luminosity trigger 75k
+    const int min_ticks_per_event =  533; // 400M / 750k = 533.3
 };
 
 // only read data from the next event after all data from this event is processed
@@ -169,10 +169,10 @@ int main() {
     }
 	int nchips = dtc11_binary_fn_list.size();
     std::cout<< "Number of chips mapped to DTC 11 = " << nchips <<endl;
-    std::vector<float> elink_chip_ratio(nchips, 3); // assume maximum possible e-link for now. By design e-link capacity should be well above triggerred data rate
+    std::vector<float> elink_chip_ratio(nchips, 3); // All chips connected to DTC 11 has 3 e-links
     auto circuit = std::make_shared<Circuit>();
-    auto player  = std::make_shared<DataPlayerFromFile>(dtc11_binary_fn_list, nchips, elink_chip_ratio); // there are 5 modules in dtc11 elink0
-    auto evt_builder  = std::make_shared<DummyEventBuilder>(nchips); // there are 5 modules in dtc11 elink0
+    auto player  = std::make_shared<DataPlayerFromFile>(dtc11_binary_fn_list, nchips, elink_chip_ratio); // there are 60 modules in dtc11
+    auto evt_builder  = std::make_shared<DummyEventBuilder>(nchips); 
     circuit->add_component(player);
     circuit->add_component(evt_builder);
 
