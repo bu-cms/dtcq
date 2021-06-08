@@ -9,6 +9,8 @@ jobs:
     - uses: actions/checkout@v2
       with:
         submodules: true
+    - name: setup libboost
+      run: sudo apt install libboost-dev libboost-all-dev
     - name: build
       run: mkdir build;cd build;cmake ..;make;
     - name: Run Test fifo speed test
