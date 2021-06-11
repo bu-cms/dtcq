@@ -20,7 +20,7 @@ class Port {
             value = new_value;
         }
     protected:
-        T value;
+        T value=0;
 };
 template<typename T>
 class InputPort: public Port<T> {
