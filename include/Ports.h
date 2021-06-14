@@ -37,12 +37,15 @@ class OutputPort: public Port<T>, public Propagatable {
         }
 
         virtual void propagate() override{
+            if (Port<T>::value == last_value) return;
             for(auto port: connected_ports) {
                 port->set_value(Port<T>::value);
             }
+            last_value = Port<T>::value;
         }
     protected:
         vector<InputPort<T>*> connected_ports;
+        T last_value=0;
 };
 
 
