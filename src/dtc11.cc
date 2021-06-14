@@ -85,9 +85,9 @@ public:
             if (nticks%10==0) {
                 assert(nbunch<bunches_per_orbit);
                 for (int i=0; i<time_since_recent_L1As.size(); i++) time_since_recent_L1As[i]++;
-                if (time_since_recent_L1As.size()>0 && time_since_recent_L1As.front()>bunches_per_orbit) time_since_recent_L1As.pop_front();
+                if (time_since_recent_L1As.size()>0 && time_since_recent_L1As.front()>trigger_rule_bunch_period) time_since_recent_L1As.pop_front();
                 int new_rand = rand();
-                if (time_since_recent_L1As.size()<8 && bunch_not_empty[nbunch] && rand()%int(min_ticks_per_event/10)==0) {
+                if (time_since_recent_L1As.size()<trigger_rule_max_L1As && bunch_not_empty[nbunch] && rand()%int(min_ticks_per_event/10)==0) {
                     triggered_events ++;
                     time_since_recent_L1As.push_back(0);
                 }
@@ -130,7 +130,7 @@ private:
     static const int min_ticks_per_event =  533; // 400M / 750k = 533.3
     static const int bunches_per_orbit = 3564;
     bool bunch_not_empty[bunches_per_orbit] = {0}; //modified in initializer
-    static const int trigger_rule_max_L1A = 8;
+    static const int trigger_rule_max_L1As = 8;
     static const int trigger_rule_bunch_period = 130; // No more than 8 L1As within 130 bunch crossings;
     std::deque<int> time_since_recent_L1As;
 };
