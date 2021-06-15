@@ -23,10 +23,6 @@ typedef FIFO<uint64_t> FIFO64;
 typedef FIFO<uint16_t> FIFO16;
 
 bool DEBUG=false;
-const bool RANDOM_L1=true;
-const bool TRIGGER_RULE=true;
-enum RATE_TYPE { NODELAY=0, HALF=1, FULL=2 };
-const int OUTPUT_RATE=HALF;
 
 // read data from binary file then split streams into different chip managers
 class DataPlayerFromFile final : public Component
@@ -35,7 +31,7 @@ public:
     std::vector<OutputPort<bool>> out_read;
     std::vector<OutputPort<uint64_t>> out_data;
 
-    DataPlayerFromFile(vector<string> file_name_list, int _nchips, vector<float> elink_chip_ratio) : Component(), out_read(_nchips), out_data(_nchips), nevents(_nchips, 0) {
+    DataPlayerFromFile(vector<string> file_name_list, int _nchips, vector<float> elink_chip_ratio, bool is_random_l1, bool use_trigger_rule) : Component(), out_read(_nchips), out_data(_nchips), nevents(_nchips, 0), RANDOM_L1(is_random_l1), TRIGGER_RULE(use_trigger_rule) {
         assert(_nchips == file_name_list.size());
         assert(_nchips == elink_chip_ratio.size());
         nchips = _nchips;
@@ -89,7 +85,7 @@ public:
                 int new_rand = rand();
                 if (time_since_recent_L1As.size()<trigger_rule_max_L1As && bunch_not_empty[nbunch] && rand()%int(min_ticks_per_event/10)==0) {
                     triggered_events ++;
-                    time_since_recent_L1As.push_back(0);
+                    if (TRIGGER_RULE) time_since_recent_L1As.push_back(0);
                 }
                 nbunch ++;
                 if (nbunch == bunches_per_orbit) nbunch = 0;
@@ -118,6 +114,8 @@ public:
         nticks ++;
     }
 private:
+    const bool RANDOM_L1;
+    const bool TRIGGER_RULE;
     unsigned long long nticks = 0;
     int triggered_events = 0;
     int nchips;
@@ -146,14 +144,16 @@ public:
     std::vector<InputPort<uint16_t>> in_control    ;
     std::vector<OutputPort<bool>> out_read_data;
     std::vector<OutputPort<bool>> out_read_control ;
-    EventBuilder(int _nchips) : Component(), in_data_valid(_nchips), in_data(_nchips), in_control_valid(_nchips), in_control(_nchips), out_read_data(_nchips), out_read_control(_nchips),
+    EventBuilder(int _nchips, bool output_rate) : Component(), in_data_valid(_nchips), in_data(_nchips), in_control_valid(_nchips), in_control(_nchips), out_read_data(_nchips), out_read_control(_nchips),
     words_to_read(_nchips, 0), 
     control_full_event(_nchips, false), 
     read_control_last_time(_nchips, false), 
     read_data_last_time(_nchips, false), 
     buffer_counter(_nchips, 0),
-    control_new_event_header(_nchips, false) {
+    control_new_event_header(_nchips, false),
+    OUTPUT_RATE(output_rate) {
         nchips = _nchips;
+        WORD_PER_CLOCK_TICK_TO_SEND_EVENT = 8 * OUTPUT_RATE;// equals to number of output links with 25GB/s speed. By design this can be up to 16.
         for (int ichip=0; ichip<nchips; ichip++) {
             add_output( &(out_read_data[ichip]) );
             add_output( &(out_read_control[ichip]) );
@@ -210,6 +210,7 @@ public:
     }
 private:
     int nchips;
+    const int OUTPUT_RATE;
     std::vector<int> words_to_read;
     std::vector<int> buffer_counter; // instead of an actual buffer
     std::vector<bool> control_full_event;
@@ -218,12 +219,66 @@ private:
     std::vector<bool> read_data_last_time;
     int clock_ticks_counter = 0;
     bool processing_new_event = true;
-    const int WORD_PER_CLOCK_TICK_TO_SEND_EVENT = 8*OUTPUT_RATE; // equals to number of output links with 25GB/s speed. By design this can be up to 16.
+    int WORD_PER_CLOCK_TICK_TO_SEND_EVENT = 0; // equals to number of output links with 25GB/s speed. By design this can be up to 16.
     int remaining_time_to_send_last_event = 0;
 };
 
 
-int main() {
+int main(int argc, char* argv[]) {
+
+    // Default parameters
+    bool RANDOM_L1=true;
+    bool TRIGGER_RULE=true;
+    enum RATE_TYPE { NODELAY=0, HALF=1, FULL=2 };
+    int OUTPUT_RATE=HALF;
+
+    // argument parsing
+    std::string help_msg("Usage: ./build/dtc11 [options]\n --help:   display this message.\n --random-l1 L1-TYPE:   L1-TYPE is boolean, set whether L1 trigger rate random with average of 750kHZ or just constantly 750kHz.\n --no-trigger-rule:   Only effective for the random L1 trigger mode, disables the trigger rules.\n --output-rate RATE-TYPE:   set the output rate for the event builder. RATE-TYPE values can be in {\"nodelay\", \"half\", \"full\"}.");
+    for (int iarg =0; iarg<argc; iarg++) {
+        if (iarg==0) continue;
+        if (std::string(argv[iarg])=="--help") {std::cerr<<help_msg<<std::endl; return 0;}
+        if (std::string(argv[iarg])=="--random-l1") {
+            if (iarg+1 < argc) {
+                std::string input_random_l1(argv[++iarg]);
+                if (input_random_l1=="0" || input_random_l1=="false" || input_random_l1=="False") RANDOM_L1=false;
+            }
+            else {
+                std::cerr<<"--random-l1 option requires one argument."<<std::endl;
+                return 1;
+            }
+            continue;
+        }
+        if (std::string(argv[iarg])=="--no-trigger-rule") {
+            TRIGGER_RULE = false;
+            continue;
+        }
+        if (std::string(argv[iarg])=="--output-rate") {
+            if (iarg+1 < argc) {
+                std::string output_rate_type(argv[++iarg]);
+                if (output_rate_type=="nodelay")   {OUTPUT_RATE=NODELAY; }
+                else if (output_rate_type=="half") {OUTPUT_RATE=HALF;    }
+                else if (output_rate_type=="full") {OUTPUT_RATE=FULL;    }
+                else {std::cerr<<"Unknow argument "<<output_rate_type<<" following option --output-rate."<<std::endl; return 1;}
+            }
+            else {
+                std::cerr<<"--output-rate option requires one argument."<<std::endl;
+                return 1;
+            }
+            continue;
+        }
+        std::cerr<<"Unknow option/argument: "<<argv[iarg]<<std::endl;
+        return 2;
+    }
+    std::string output_dir("output");
+    if (RANDOM_L1) output_dir+="_randomL1"; else output_dir+="_constL1";
+    if (RANDOM_L1 && !TRIGGER_RULE)  output_dir+="NoTriggerRule";
+    std::cout<<"Running Mode: Randome L1="<<RANDOM_L1<<" TRIGGER_RULE="<<TRIGGER_RULE<<" OUTPUT_RATE=";
+    if (OUTPUT_RATE==NODELAY) {std::cout<<"nodelay"; output_dir+="_outputNoDelay"; }
+    if (OUTPUT_RATE==HALF)    {std::cout<<"half";    output_dir+="_outputHalfRate";}
+    if (OUTPUT_RATE==FULL)    {std::cout<<"full";    output_dir+="_outputFullRate";}
+    std::cout<<" Output dir="<<output_dir<<std::endl;
+    create_directories(output_dir);
+
     // get a list of input files related to dtc11
     std::vector<std::string> dtc11_binary_fn_list;
     path input_dir("./input");
@@ -237,8 +292,8 @@ int main() {
     std::cout<< "Number of chips mapped to DTC 11 = " << nchips <<endl;
     std::vector<float> elink_chip_ratio(nchips, 3); // All chips connected to DTC 11 has 3 e-links
     auto circuit = std::make_shared<Circuit>();
-    auto player  = std::make_shared<DataPlayerFromFile>(dtc11_binary_fn_list, nchips, elink_chip_ratio); // there are 60 modules in dtc11
-    auto evt_builder  = std::make_shared<EventBuilder>(nchips); 
+    auto player  = std::make_shared<DataPlayerFromFile>(dtc11_binary_fn_list, nchips, elink_chip_ratio, RANDOM_L1, TRIGGER_RULE); // there are 60 modules in dtc11
+    auto evt_builder  = std::make_shared<EventBuilder>(nchips, OUTPUT_RATE); 
     circuit->add_component(player);
     circuit->add_component(evt_builder);
 
@@ -277,8 +332,10 @@ int main() {
     int inactive_time = 0;
     int max_inactive_time = 100000;
     int i_tick = 0;
-    std::ofstream outputsize_input_fifo("output/input_fifo_sizes.txt");
-    std::ofstream outputsize_output_fifo_data("output/output_fifo_data_sizes.txt");
+    std::ofstream outputsize_input_fifo(output_dir+"/input_fifo_sizes.txt");
+    if (!outputsize_input_fifo) {std::cerr<<"Unable to write to "<<output_dir+"/input_fifo_sizes.txt"<<std::endl; return 4;}
+    std::ofstream outputsize_output_fifo_data(output_dir+"/output_fifo_data_sizes.txt");
+    if (!outputsize_output_fifo_data) {std::cerr<<"Unable to write to "<<output_dir+"/output_fifo_data_sizes.txt"<<std::endl; return 4;}
     std::cout<<"auto-ticking..."<<std::endl;
     while (inactive_time<max_inactive_time )
     {
