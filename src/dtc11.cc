@@ -144,6 +144,7 @@ public:
     std::vector<InputPort<uint16_t>> in_control    ;
     std::vector<OutputPort<bool>> out_read_data;
     std::vector<OutputPort<bool>> out_read_control ;
+    OutputPort<bool> out_event_ready ;
     EventBuilder(int _nchips, bool output_rate) : Component(), in_data_valid(_nchips), in_data(_nchips), in_control_valid(_nchips), in_control(_nchips), out_read_data(_nchips), out_read_control(_nchips),
     words_to_read(_nchips, 0), 
     control_full_event(_nchips, false), 
@@ -158,11 +159,13 @@ public:
             add_output( &(out_read_data[ichip]) );
             add_output( &(out_read_control[ichip]) );
         }
+        add_output( &(out_event_ready) );
     };
 
     void tick() override {
         clock_ticks_counter ++;
         if (remaining_time_to_send_last_event > 0) remaining_time_to_send_last_event--;
+        if (out_event_ready.get_value()) out_event_ready.set_value(false);
         for (int ichip=0; ichip<nchips; ichip++) {
             if (in_data_valid[ichip].get_value() == true) {
                 buffer_counter[ichip] += 1;
@@ -194,6 +197,7 @@ public:
             if (WORD_PER_CLOCK_TICK_TO_SEND_EVENT>0) {
                 remaining_time_to_send_last_event = int(std::accumulate(buffer_counter.begin(), buffer_counter.end(), 0)/WORD_PER_CLOCK_TICK_TO_SEND_EVENT);
             }
+            out_event_ready.set_value(true);
             int maximum_number_of_words = *max_element(buffer_counter.begin(), buffer_counter.end());
             std::cout<<"New event processed after "<<clock_ticks_counter<<" clock ticks! with maximum number of words per chip = "<<maximum_number_of_words;
             std::cout<<" Will take "<<remaining_time_to_send_last_event<<" clock ticks to send it out."<<std::endl;
@@ -278,7 +282,7 @@ int main(int argc, char* argv[]) {
             }
             continue;
         }
-        if (std::string(argv[iarg])=="--nevents/-n") {
+        if (std::string(argv[iarg])=="--nevents" || std::string(argv[iarg])=="-n") {
             if (iarg+1 < argc) {
                 std::string input_nevents_str(argv[++iarg]);
                 nevents = stoi(input_nevents_str);
@@ -307,6 +311,8 @@ int main(int argc, char* argv[]) {
     if (OUTPUT_RATE==NODELAY) {std::cout<<"nodelay"; output_dir+="_outputNoDelay"; }
     if (OUTPUT_RATE==HALF)    {std::cout<<"half";    output_dir+="_outputHalfRate";}
     if (OUTPUT_RATE==FULL)    {std::cout<<"full";    output_dir+="_outputFullRate";}
+    output_dir+="_N";
+    output_dir+=to_string(nevents);
     std::cout<<" Output dir="<<output_dir<<std::endl;
     create_directories(output_dir);
 
@@ -361,7 +367,6 @@ int main(int argc, char* argv[]) {
         evt_builder->out_read_control[ichip].connect( &(fifos_output_control[ichip]->in_pop_enable) );
     }
     int inactive_time = 0;
-    int max_inactive_time = 100000;
     unsigned long long i_tick = 0;
     int i_event = 0;
     std::ofstream outputsize_input_fifo(output_dir+"/input_fifo_sizes.txt");
@@ -369,7 +374,7 @@ int main(int argc, char* argv[]) {
     std::ofstream outputsize_output_fifo_data(output_dir+"/output_fifo_data_sizes.txt");
     if (!outputsize_output_fifo_data) {std::cerr<<"Unable to write to "<<output_dir+"/output_fifo_data_sizes.txt"<<std::endl; return 4;}
     std::cout<<"auto-ticking..."<<std::endl;
-    while (inactive_time<max_inactive_time )
+    while (true)
     {
         //////////////////// DEBUG BLOCK ///////////////////////////////
         if (DEBUG) {                                                ////
@@ -435,10 +440,6 @@ int main(int argc, char* argv[]) {
         i_tick++;
         //std::cout<<"tick="<<i_tick<<std::endl;
         circuit->tick();
-        bool activity=false;
-        for (auto port:evt_builder->in_data_valid) activity = activity | port.get_value();
-        if(!activity) inactive_time++;
-        else inactive_time=0;
         for (int ichip=0; ichip<nchips; ichip++) {
             if (ichip>0) {outputsize_input_fifo<<","; outputsize_output_fifo_data<<",";}
             outputsize_input_fifo<<to_string(fifos_input[ichip]->d_get_buffer_size());
@@ -446,6 +447,21 @@ int main(int argc, char* argv[]) {
         };
         outputsize_input_fifo<<endl;
         outputsize_output_fifo_data<<endl;
+        if (evt_builder->out_event_ready.get_value()) {
+            i_event++;
+            // progress bar
+            int barWidth = 70;
+            std::cout << "[";
+            int pos = barWidth * i_event/nevents;
+            for (int i = 0; i < barWidth; ++i) {
+                if (i < pos) std::cout << "=";
+                else if (i == pos) std::cout << ">";
+                else std::cout << " ";
+            }
+            std::cout << "] " << i_event <<"/"<< nevents << " %\r";
+            std::cout.flush();
+            if (i_event>=nevents) break;
+        }
     }
-    cout<<"total ticks="<<i_tick - max_inactive_time <<endl;
+    cout<<std::endl<<"total ticks="<<i_tick<<endl;
 }
