@@ -231,12 +231,24 @@ int main(int argc, char* argv[]) {
     bool TRIGGER_RULE=true;
     enum RATE_TYPE { NODELAY=0, HALF=1, FULL=2 };
     int OUTPUT_RATE=HALF;
+    std::string input_dirname("input_10kevt");
+    int nevents=1000;
 
     // argument parsing
-    std::string help_msg("Usage: ./build/dtc11 [options]\n --help:   display this message.\n --random-l1 L1-TYPE:   L1-TYPE is boolean, set whether L1 trigger rate random with average of 750kHZ or just constantly 750kHz.\n --no-trigger-rule:   Only effective for the random L1 trigger mode, disables the trigger rules.\n --output-rate RATE-TYPE:   set the output rate for the event builder. RATE-TYPE values can be in {\"nodelay\", \"half\", \"full\"}.");
+    std::string help_msg("Usage: ./build/dtc11 [options]\n --help:   display this message.\n --input/-i INPUT_DIRNAME:   Change the input directory name, by default uses input_10k.\n --random-l1 L1-TYPE:   L1-TYPE is boolean, set whether L1 trigger rate random with average of 750kHZ or just constantly 750kHz.\n --no-trigger-rule:   Only effective for the random L1 trigger mode, disables the trigger rules.\n --output-rate RATE-TYPE:   set the output rate for the event builder. RATE-TYPE values can be in {\"nodelay\", \"half\", \"full\"}.");
     for (int iarg =0; iarg<argc; iarg++) {
         if (iarg==0) continue;
         if (std::string(argv[iarg])=="--help") {std::cerr<<help_msg<<std::endl; return 0;}
+        if (std::string(argv[iarg])=="--input" || std::string(argv[iarg])=="-i") {
+            if (iarg+1 < argc) {
+                input_dirname = argv[++iarg];
+            }
+            else {
+                std::cerr<<"--input/-i option requires one argument."<<std::endl;
+                return 1;
+            }
+            continue;
+        }
         if (std::string(argv[iarg])=="--random-l1") {
             if (iarg+1 < argc) {
                 std::string input_random_l1(argv[++iarg]);
@@ -266,10 +278,29 @@ int main(int argc, char* argv[]) {
             }
             continue;
         }
+        if (std::string(argv[iarg])=="--nevents/-n") {
+            if (iarg+1 < argc) {
+                std::string input_nevents_str(argv[++iarg]);
+                nevents = stoi(input_nevents_str);
+            }
+            else {
+                std::cerr<<"--nevents/-n option requires one argument."<<std::endl;
+                return 1;
+            }
+            continue;
+        }
         std::cerr<<"Unknow option/argument: "<<argv[iarg]<<std::endl;
         return 2;
     }
+
+    // print out parameters and setup the output dir
     std::string output_dir("output");
+    if (input_dirname.find("input_") != std::string::npos) {
+        std::size_t pos = input_dirname.find("input_")+5; 
+        std::string input_tag = input_dirname.substr(pos);
+        while(input_tag.back()=='/') input_tag.pop_back();
+        output_dir+=input_tag;
+    }
     if (RANDOM_L1) output_dir+="_randomL1"; else output_dir+="_constL1";
     if (RANDOM_L1 && !TRIGGER_RULE)  output_dir+="NoTriggerRule";
     std::cout<<"Running Mode: Randome L1="<<RANDOM_L1<<" TRIGGER_RULE="<<TRIGGER_RULE<<" OUTPUT_RATE=";
@@ -281,7 +312,7 @@ int main(int argc, char* argv[]) {
 
     // get a list of input files related to dtc11
     std::vector<std::string> dtc11_binary_fn_list;
-    path input_dir("./input");
+    path input_dir(input_dirname);
     for (auto iter_fn=directory_iterator(input_dir); iter_fn != directory_iterator(); iter_fn++) {
         if ( is_directory(iter_fn->path()) ) continue;
         string filename = iter_fn->path().string();
@@ -331,7 +362,8 @@ int main(int argc, char* argv[]) {
     }
     int inactive_time = 0;
     int max_inactive_time = 100000;
-    int i_tick = 0;
+    unsigned long long i_tick = 0;
+    int i_event = 0;
     std::ofstream outputsize_input_fifo(output_dir+"/input_fifo_sizes.txt");
     if (!outputsize_input_fifo) {std::cerr<<"Unable to write to "<<output_dir+"/input_fifo_sizes.txt"<<std::endl; return 4;}
     std::ofstream outputsize_output_fifo_data(output_dir+"/output_fifo_data_sizes.txt");
