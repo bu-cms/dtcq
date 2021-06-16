@@ -12,7 +12,7 @@ sudo apt install libboost-dev libboost-all-dev
 
 ### General
 ```bash
-BRANCH="v0.4" # Change to whatever branch / tag you need
+BRANCH="v0.51" # Change to whatever branch / tag you need
 git clone --recursive git@github.com:bu-cms/dtcq.git -b "${BRANCH}"
 cd dtcq
 mkdir build
