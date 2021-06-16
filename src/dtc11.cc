@@ -96,6 +96,11 @@ public:
             bool trigger_condition = false;
             if (RANDOM_L1)  trigger_condition = (triggered_events > nevents[ichip]);
             else trigger_condition = ( (min_ticks_per_event+nticks)/(1+nevents[ichip]) >= min_ticks_per_event );
+            // start over if at the end of input file
+            if ( input_streams[ichip]->eof() ) {
+                input_streams[ichip]->clear();
+                input_streams[ichip]->seekg(0);
+            }
             if ( (!input_streams[ichip]->eof()) && (nticks%ticks_per_word[ichip]==0) && trigger_condition) {
                 value = 0;
                 input_streams[ichip]->read( reinterpret_cast<char*>(&value), sizeof(value) ) ;
@@ -325,6 +330,12 @@ int main(int argc, char* argv[]) {
         if ( filename.find("dtc11") == std::string::npos ) continue;
         dtc11_binary_fn_list.push_back(filename);
     }
+    // write the order of input filenames into a log file, so that we know which ichip number maps to which physical chip
+    std::ofstream log_fn_list(output_dir+"/ordered_file_names.txt");
+    for (auto filename : dtc11_binary_fn_list) log_fn_list<<filename<<std::endl;
+    log_fn_list.close();
+
+    // Define the circuit
     int nchips = dtc11_binary_fn_list.size();
     std::cout<< "Number of chips mapped to DTC 11 = " << nchips <<endl;
     std::vector<float> elink_chip_ratio(nchips, 3); // All chips connected to DTC 11 has 3 e-links
