@@ -10,7 +10,7 @@ jobs:
       with:
         submodules: true
     - name: setup libboost
-      run: sudo apt install libboost-dev libboost-all-dev
+      run: sudo apt update; sudo apt install libboost-dev libboost-all-dev
     - name: build
       run: mkdir build;cd build;cmake ..;make;
     - name: Run Test fifo speed test
