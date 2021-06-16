@@ -116,7 +116,7 @@ def find_local_maximum(a):
     return ret
 
 def get_perchip_tag(data, ichip):
-    perchip_tag = "DTC={}, ".format(data["chip"][ichip].basename)
+    perchip_tag = "DTC={}, ".format(data["chip"][ichip].dtc_id)
     if data["chip"][ichip].is_barrel: 
         perchip_tag += "Barrel"
     else: 
@@ -143,7 +143,7 @@ def plot_buffer_over_time(data, outdir, args):
         ax.set_xlabel("clock tick")
         ax.set_ylabel("buffer occupancy (kb)")
         perchip_tag = get_perchip_tag(data, ichip)
-        ax.text(0.5, 0.8, perchip_tag, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+        ax.text(0.5, 0.7, perchip_tag, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
         fig.savefig(plot_file_name)
         print("{} saved.".format(plot_file_name))
         ax.clear()
@@ -153,7 +153,7 @@ def plot_buffer_over_time(data, outdir, args):
     plot_file_name = "{}/DTC11Total.png".format(buffer_over_time_outdir)
     ax.set_xlabel("clock tick")
     ax.set_ylabel("buffer occupancy (kb)")
-    ax.text(0.5, 0.8, "Sum of FIFO occupancies", horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+    ax.text(0.5, 0.7, "Sum of FIFO occupancies", horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
     fig.savefig(plot_file_name)
     print("{} saved.".format(plot_file_name))
     ax.clear()
@@ -215,7 +215,7 @@ def plot_buffer_distribution(data, outdir, args, data_to_compare=None, labels_fo
         ax.set_xlabel("buffer occupancy (kb)")
         ax.set_ylabel("counts")
         perchip_tag = get_perchip_tag(data, ichip)
-        ax.text(0.5, 0.8, perchip_tag, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+        ax.text(0.5, 0.7, perchip_tag, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
         output_filename = "{}/{}.png".format(buffer_dist_outdir, data["chip"][ichip].basename)
         fig.savefig(output_filename)
         print("{} saved.".format(output_filename))
