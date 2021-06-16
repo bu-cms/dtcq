@@ -16,6 +16,9 @@
 #include <bitset>
 #include <stdexcept>
 #include <interface/EventBoundaryFinder.h>
+#include <interface/ChipDataPlayer.h>
+#include <interface/DTCEventBuilder.h>
+
 using namespace std;
 using namespace boost::filesystem;
 
@@ -24,215 +27,6 @@ typedef FIFO<uint16_t> FIFO16;
 
 bool DEBUG=false;
 
-// read data from binary file then split streams into different chip managers
-class DataPlayerFromFile final : public Component
-{
-public:
-    std::vector<OutputPort<bool>> out_read;
-    std::vector<OutputPort<uint64_t>> out_data;
-
-    DataPlayerFromFile(vector<string> file_name_list, int _nchips, vector<float> elink_chip_ratio, bool is_random_l1, bool use_trigger_rule) : Component(), out_read(_nchips), out_data(_nchips), nevents(_nchips, 0), RANDOM_L1(is_random_l1), TRIGGER_RULE(use_trigger_rule) {
-        assert(_nchips == file_name_list.size());
-        assert(_nchips == elink_chip_ratio.size());
-        nchips = _nchips;
-        for (int ichip=0; ichip<nchips; ichip++) {
-            add_output( &(out_read[ichip]) );
-            add_output( &(out_data[ichip]) );
-            assert( elink_chip_ratio[ichip]>0 );
-            ticks_per_word.push_back( int(ticks_per_word_per_elink/elink_chip_ratio[ichip]) );
-            std::ifstream* new_stream = new std::ifstream(file_name_list[ichip].c_str(), std::ios::binary);
-            if (!bool(*new_stream)) throw std::invalid_argument((string("Unable to open file ")+file_name_list[ichip]).c_str());
-            input_streams.push_back( new_stream );
-        }
-        // edit bunch_not_empty according to LHC filling scheme
-        bool* position_in_orbit = bunch_not_empty;
-        for (int i=0;i<3;i++){
-            for (int j=0; j<2; j++) {
-                for (int k=0; k<3; k++) {
-                    std::fill(position_in_orbit, position_in_orbit+72, true);
-                    position_in_orbit+=72;
-                    position_in_orbit+=8;
-                }
-                position_in_orbit+=30;
-            }
-            for (int k=0; k<4; k++) {
-                std::fill(position_in_orbit, position_in_orbit+72, true);
-                position_in_orbit+=72;
-                position_in_orbit+=8;
-            }
-            position_in_orbit+=31;
-        }
-        for (int j=0; j<3; j++) {
-            for (int k=0; k<3; k++) {
-                std::fill(position_in_orbit, position_in_orbit+72, true);
-                position_in_orbit+=72;
-                position_in_orbit+=8;
-            }
-            position_in_orbit+=30;
-        }
-        position_in_orbit+=81;
-        assert( position_in_orbit - bunch_not_empty == bunches_per_orbit );
-    };
-
-    void tick() override {
-        if (RANDOM_L1) {
-            // Check trigger every 25ns (10 clock ticks) at bunch crossings
-            // Implemented trigger rule: no more than 8 triggers 130 bunch crossings
-            if (nticks%10==0) {
-                assert(nbunch<bunches_per_orbit);
-                for (int i=0; i<time_since_recent_L1As.size(); i++) time_since_recent_L1As[i]++;
-                if (time_since_recent_L1As.size()>0 && time_since_recent_L1As.front()>trigger_rule_bunch_period) time_since_recent_L1As.pop_front();
-                int new_rand = rand();
-                if (time_since_recent_L1As.size()<trigger_rule_max_L1As && bunch_not_empty[nbunch] && rand()%int(min_ticks_per_event/10)==0) {
-                    triggered_events ++;
-                    if (TRIGGER_RULE) time_since_recent_L1As.push_back(0);
-                }
-                nbunch ++;
-                if (nbunch == bunches_per_orbit) nbunch = 0;
-            }
-        }
-        for (int ichip=0; ichip<nchips; ichip++) {
-            // Condition to read a new word: 1. File not at EOF; 2. matches ticks_per_word to be consistent with e-link speed 3. Does not exceed trigger rate
-            bool trigger_condition = false;
-            if (RANDOM_L1)  trigger_condition = (triggered_events > nevents[ichip]);
-            else trigger_condition = ( (min_ticks_per_event+nticks)/(1+nevents[ichip]) >= min_ticks_per_event );
-            // start over if at the end of input file
-            if ( input_streams[ichip]->eof() ) {
-                input_streams[ichip]->clear();
-                input_streams[ichip]->seekg(0);
-            }
-            if ( (!input_streams[ichip]->eof()) && (nticks%ticks_per_word[ichip]==0) && trigger_condition) {
-                value = 0;
-                input_streams[ichip]->read( reinterpret_cast<char*>(&value), sizeof(value) ) ;
-                if(value & (((uint64_t)1)<<63)) nevents[ichip]++;
-                bitset<64> b_value(value);
-                //std::cout<<"Event player chip "<<ichip<<" data = "<<b_value<<std::endl;
-                //std::cout<<"Event player chip "<<ichip<<" input file get single character = "<<input_streams[ichip]->get()<<std::endl;
-                out_read[ichip].set_value(true);
-                out_data[ichip].set_value(value);
-            }
-            else {
-                out_read[ichip].set_value(false);
-                out_data[ichip].set_value(0);
-            }
-        }
-        nticks ++;
-    }
-private:
-    const bool RANDOM_L1;
-    const bool TRIGGER_RULE;
-    unsigned long long nticks = 0;
-    int triggered_events = 0;
-    int nchips;
-    int nbunch = 0; // cyclic counting bunch from 0-3563;
-    std::vector<std::ifstream*> input_streams;
-    std::vector<int> nevents;
-    uint64_t value;
-    static const int ticks_per_word_per_elink = 20; // assuming all chip has rate of 1.28Gbps, 400M * 64 / 1.28G = 20
-    std::vector<int> ticks_per_word; //ticks_per_word_per_elink divided by e-link-to-chip ratio
-    static const int min_ticks_per_event =  533; // 400M / 750k = 533.3
-    static const int bunches_per_orbit = 3564;
-    bool bunch_not_empty[bunches_per_orbit] = {0}; //modified in initializer
-    static const int trigger_rule_max_L1As = 8;
-    static const int trigger_rule_bunch_period = 130; // No more than 8 L1As within 130 bunch crossings;
-    std::deque<int> time_since_recent_L1As;
-};
-
-// only read data from the next event after all data from this event is processed
-// processed = nothong done, for now
-class EventBuilder final : public Component
-{
-public:
-    std::vector<InputPort<bool>> in_data_valid ;
-    std::vector<InputPort<uint64_t>> in_data   ;
-    std::vector<InputPort<bool>> in_control_valid ;
-    std::vector<InputPort<uint16_t>> in_control    ;
-    std::vector<OutputPort<bool>> out_read_data;
-    std::vector<OutputPort<bool>> out_read_control ;
-    OutputPort<bool> out_event_ready ;
-    EventBuilder(int _nchips, bool output_rate) : Component(), in_data_valid(_nchips), in_data(_nchips), in_control_valid(_nchips), in_control(_nchips), out_read_data(_nchips), out_read_control(_nchips),
-    words_to_read(_nchips, 0), 
-    control_full_event(_nchips, false), 
-    read_control_last_time(_nchips, false), 
-    read_data_last_time(_nchips, false), 
-    buffer_counter(_nchips, 0),
-    control_new_event_header(_nchips, false),
-    OUTPUT_RATE(output_rate) {
-        nchips = _nchips;
-        WORD_PER_CLOCK_TICK_TO_SEND_EVENT = 8 * OUTPUT_RATE;// equals to number of output links with 25GB/s speed. By design this can be up to 16.
-        for (int ichip=0; ichip<nchips; ichip++) {
-            add_output( &(out_read_data[ichip]) );
-            add_output( &(out_read_control[ichip]) );
-        }
-        add_output( &(out_event_ready) );
-    };
-
-    void tick() override {
-        clock_ticks_counter ++;
-        if (remaining_time_to_send_last_event > 0) remaining_time_to_send_last_event--;
-        if (out_event_ready.get_value()) out_event_ready.set_value(false);
-        for (int ichip=0; ichip<nchips; ichip++) {
-            if (in_data_valid[ichip].get_value() == true) {
-                buffer_counter[ichip] += 1;
-                words_to_read[ichip] -= 1;
-                assert(words_to_read[ichip] >= 0);
-            }
-            if (in_control_valid[ichip].get_value() == true){
-                //std::bitset<16> x(in_control[ichip].get_value());
-                //std::cout<<"chip "<<ichip<<" control value = "<<x<<std::endl;
-                assert(!control_full_event[ichip]);
-                if ( (in_control[ichip].get_value() & (((uint16_t)1<<15))) && (buffer_counter[ichip]>0)) {
-                    control_full_event[ichip] = true;
-                    control_new_event_header[ichip] = true;
-                }
-                else {
-                    words_to_read[ichip] += 1;
-                }
-            }
-            bool read_data_this_time = (words_to_read[ichip]>1) || (words_to_read[ichip]==1 && !read_data_last_time[ichip]);
-            out_read_data[ichip].set_value( read_data_this_time );
-            read_data_last_time[ichip] = read_data_this_time;
-            out_read_control[ichip].set_value( (!control_full_event[ichip]) && (!read_control_last_time[ichip]) );
-            read_control_last_time[ichip]=( (!control_full_event[ichip]) && (!read_control_last_time[ichip]) ); // avoid consecutive control read, otherwise might read more word than needed due to signal delay.
-        }
-        //std::cout<<"EBD is full event status = ";
-        //for (auto i : control_full_event) std::cout<<i;
-        //std::cout<<std::endl;
-        if (std::all_of(control_full_event.begin(), control_full_event.end(), [](bool v){return v;} ) && std::all_of(words_to_read.begin(), words_to_read.end(), [](int i){return i==0;} ) && (remaining_time_to_send_last_event == 0)) { // if all chips have full data for the event, and the last event has been sent out
-            if (WORD_PER_CLOCK_TICK_TO_SEND_EVENT>0) {
-                remaining_time_to_send_last_event = int(std::accumulate(buffer_counter.begin(), buffer_counter.end(), 0)/WORD_PER_CLOCK_TICK_TO_SEND_EVENT);
-            }
-            out_event_ready.set_value(true);
-            int maximum_number_of_words = *max_element(buffer_counter.begin(), buffer_counter.end());
-            std::cout<<"New event processed after "<<clock_ticks_counter<<" clock ticks! with maximum number of words per chip = "<<maximum_number_of_words;
-            std::cout<<" Will take "<<remaining_time_to_send_last_event<<" clock ticks to send it out."<<std::endl;
-            clock_ticks_counter = 0;
-            for (int ichip=0; ichip<nchips; ichip++) {
-                control_full_event[ichip] = false;
-                buffer_counter[ichip] = 0;
-                if (control_new_event_header[ichip]) {
-                    control_new_event_header[ichip] = false;
-                    words_to_read[ichip] ++;
-                }
-            }
-        }
-    }
-private:
-    int nchips;
-    const int OUTPUT_RATE;
-    std::vector<int> words_to_read;
-    std::vector<int> buffer_counter; // instead of an actual buffer
-    std::vector<bool> control_full_event;
-    std::vector<bool> control_new_event_header;
-    std::vector<bool> read_control_last_time;
-    std::vector<bool> read_data_last_time;
-    int clock_ticks_counter = 0;
-    bool processing_new_event = true;
-    int WORD_PER_CLOCK_TICK_TO_SEND_EVENT = 0; // equals to number of output links with 25GB/s speed. By design this can be up to 16.
-    int remaining_time_to_send_last_event = 0;
-};
-
-
 int main(int argc, char* argv[]) {
 
     // Default parameters
@@ -240,7 +34,7 @@ int main(int argc, char* argv[]) {
     bool TRIGGER_RULE=true;
     enum RATE_TYPE { NODELAY=0, HALF=1, FULL=2 };
     int OUTPUT_RATE=HALF;
-    std::string input_dirname("input_10kevt");
+    std::string input_dirname("input_dtc11_10kevt");
     int nevents=1000;
 
     // argument parsing
@@ -340,8 +134,8 @@ int main(int argc, char* argv[]) {
     std::cout<< "Number of chips mapped to DTC 11 = " << nchips <<endl;
     std::vector<float> elink_chip_ratio(nchips, 3); // All chips connected to DTC 11 has 3 e-links
     auto circuit = std::make_shared<Circuit>();
-    auto player  = std::make_shared<DataPlayerFromFile>(dtc11_binary_fn_list, nchips, elink_chip_ratio, RANDOM_L1, TRIGGER_RULE); // there are 60 modules in dtc11
-    auto evt_builder  = std::make_shared<EventBuilder>(nchips, OUTPUT_RATE); 
+    auto player  = std::make_shared<ChipDataPlayer>(dtc11_binary_fn_list, nchips, elink_chip_ratio, RANDOM_L1, TRIGGER_RULE); // there are 60 modules in dtc11
+    auto evt_builder  = std::make_shared<DTCEventBuilder>(nchips, OUTPUT_RATE); 
     circuit->add_component(player);
     circuit->add_component(evt_builder);
 
