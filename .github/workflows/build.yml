@@ -19,3 +19,7 @@ jobs:
       run: ./build/demo_fifo_verification
     - name: Run Test demo event boundary finder
       run: ./build/demo_evtboundary
+    - name: Run dtc simulator on test input file repeatedly 100 times
+      run: ./build/dtc -i input_1evt_test -n 100 --random-l1 true --output-rate half
+    - name: Make plots regarding the test output
+      run: pushd plot;./plot.py ../output_1evt_test_randomL1_outputHalfRate_N100 --total-only --cumulative-use-all;popd;
