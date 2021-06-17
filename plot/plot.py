@@ -288,7 +288,7 @@ def main():
         raise NotImplementedError
     while args.inpath[-1] == "/":
         args.inpath = args.inpath[:-1]
-    outdir = "output_{}".format(args.inpath.split("/")[-1])
+    outdir = "{}".format(args.inpath.split("/")[-1])
     if not os.path.exists(outdir):
         os.makedirs(outdir)
     cache_file_name = "{}/data.pkl".format(outdir)
