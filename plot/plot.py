@@ -46,12 +46,11 @@ def load_data(data_dir, cache_file_name=""):
 
     # otherwise we load data as normal
     data = {}
-    nchips = 60
 
     # read the ordered input file names, so that we can match to the physical location of each chip
     with open("{}/ordered_file_names.txt".format(data_dir)) as ordered_file_names_txt:
         data['chip'] = [Chip(line.replace("\n","")) for line in ordered_file_names_txt.readlines()]
-    assert nchips == len(data['chip'])
+    nchips = len(data['chip'])
 
     # read the event length from input file
     nevents = read_nevents_from_dirname(data_dir)
@@ -178,8 +177,8 @@ def plot_buffer_distribution(data, outdir, args, data_to_compare=None, labels_fo
     # Plot for individual fifos
     max_single_chip_buffer = np.max(data["buffer_over_time"])
     max_single_chip_evtsize = np.max(data["event_size"])
-    binning_buffer  = np.arange(0,max_single_chip_buffer,2)
-    binning_evtsize = np.arange(0,max_single_chip_evtsize,2)
+    binning_buffer  = np.arange(0,4+max_single_chip_buffer,2)
+    binning_evtsize = np.arange(0,4+max_single_chip_evtsize,2)
     max_xlim = 300
     for ichip in range(len(data["chip"])):
         if args.total_only:
@@ -189,15 +188,15 @@ def plot_buffer_distribution(data, outdir, args, data_to_compare=None, labels_fo
         h_event_length,_ = np.histogram(data["event_size"][ichip], bins=binning_evtsize, density=True)
         if not args.no_event_length:
             ax.plot(binning_evtsize[:-1]/16, h_event_length, label="event length")
-            max_xlim = max(max_xlim, 1.05*max(binning_evtsize))
+            max_xlim = max(max_xlim, max(binning_evtsize))
         h_buffering_size,_ = np.histogram(data["buffer_over_time"][ichip], bins=binning_buffer, density=True)
         if args.add_buffer_all_tick:
             ax.plot(binning_buffer[:-1]/16 , h_buffering_size, label="fifo capacity")
-            max_xlim = max(max_xlim, 1.05*max(binning_buffer))
+            max_xlim = max(max_xlim, max(binning_buffer))
         h_buffering_local_maximum,_ = np.histogram(find_local_maximum(data["buffer_over_time"][ichip]), bins=binning_buffer, density=True)
         if not args.no_buffer_peak:
             ax.plot(binning_buffer[:-1]/16, h_buffering_local_maximum, label="fifo capacity at local maximum")
-            max_xlim = max(max_xlim, 1.05*max(binning_buffer))
+            max_xlim = max(max_xlim, max(binning_buffer))
         # Plot cumulative
         if not args.no_cumulative:
             h_cumulative = np.zeros(len(h_buffering_size),dtype=np.float32)
@@ -208,7 +207,7 @@ def plot_buffer_distribution(data, outdir, args, data_to_compare=None, labels_fo
             for ibin in range(len(h_cumulative)):
                 h_cumulative[ibin] = sum(h_normed[ibin:])
             ax.plot(binning_buffer[:-1]/16, h_cumulative, label="comprehensive cumulative")
-            max_xlim = max(max_xlim, 1.05*max(binning_buffer))
+            max_xlim = max(max_xlim, max(binning_buffer))
         ax.legend()
         ax.set_xlim(0,max_xlim/16)
         ax.set_yscale('log')
@@ -227,24 +226,24 @@ def plot_buffer_distribution(data, outdir, args, data_to_compare=None, labels_fo
         fifo_sizes_combined += np.array(data["buffer_over_time"][ichip])
         event_length_combined += np.array(data["event_size"][ichip])
         #print("event length ichip {}:".format(ichip))
-        #print(event_length[ichip])
+        #print(data["event_size"][ichip])
         #print("event length combined:")
         #print(event_length_combined)
     ax.clear()
-    binning_buffer  = np.arange(0,max(fifo_sizes_combined),5)
-    binning_evtsize = np.arange(0,max(event_length_combined),5)
+    binning_buffer  = np.arange(0,10+max(fifo_sizes_combined),5)
+    binning_evtsize = np.arange(0,10+max(event_length_combined),5)
     h_event_length,_ = np.histogram(event_length_combined, bins=binning_evtsize, density=True)
     if not args.no_event_length:
         ax.plot(binning_evtsize[:-1]/16, h_event_length, label="event length")
-        max_xlim = max(max_xlim, 1.05*max(binning_evtsize))
+        max_xlim = max(max_xlim, max(binning_evtsize))
     h_buffering_size,_ = np.histogram(fifo_sizes_combined, bins=binning_buffer, density=True)
     if args.add_buffer_all_tick:
         ax.plot(binning_buffer[:-1]/16 , h_buffering_size, label="fifo capacity")
-        max_xlim = max(max_xlim, 1.05*max(binning_buffer))
+        max_xlim = max(max_xlim, max(binning_buffer))
     h_buffering_local_maximum,_ = np.histogram(find_local_maximum(fifo_sizes_combined), bins=binning_buffer, density=True)
     if not args.no_buffer_peak:
         ax.plot(binning_buffer[:-1]/16, h_buffering_local_maximum, label="fifo capacity at local maximum")
-        max_xlim = max(max_xlim, 1.05*max(binning_buffer))
+        max_xlim = max(max_xlim, max(binning_buffer))
     # Plot cumulative
     if not args.no_cumulative:
         h_cumulative = np.zeros(len(h_buffering_size),dtype=np.float32)
@@ -255,7 +254,7 @@ def plot_buffer_distribution(data, outdir, args, data_to_compare=None, labels_fo
         for ibin in range(len(h_cumulative)):
             h_cumulative[ibin] = sum(h_normed[ibin:])
         ax.plot(binning_buffer[:-1]/16, h_cumulative, label="comprehensive cumulative")
-        max_xlim = max(max_xlim, 1.05*max(binning_buffer))
+        max_xlim = max(max_xlim, max(binning_buffer))
     ax.legend()
     ax.set_xlim(0,max_xlim/16)
     ax.set_yscale('log')
