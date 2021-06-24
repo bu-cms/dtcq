@@ -2,7 +2,7 @@
 
 using namespace std;
 
-DTCEventBuilder::DTCEventBuilder(int _nchips, bool output_rate) : Component(), in_data_valid(_nchips), in_data(_nchips), in_control_valid(_nchips), in_control(_nchips), out_read_data(_nchips), out_read_control(_nchips),
+DTCEventBuilder::DTCEventBuilder(int _nchips, int output_rate) : Component(), in_data_valid(_nchips), in_data(_nchips), in_control_valid(_nchips), in_control(_nchips), out_read_data(_nchips), out_read_control(_nchips),
 words_to_read(_nchips, 0), 
 control_full_event(_nchips, false), 
 read_control_last_time(_nchips, false), 

@@ -21,7 +21,7 @@ public:
     std::vector<OutputPort<bool>> out_read_data;
     std::vector<OutputPort<bool>> out_read_control ;
     OutputPort<bool> out_event_ready ;
-    DTCEventBuilder(int _nchips, bool output_rate);
+    DTCEventBuilder(int _nchips, int output_rate);
     void tick() override ;
 private:
     int nchips;
