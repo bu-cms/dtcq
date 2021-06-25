@@ -38,7 +38,7 @@ int main(int argc, char* argv[]) {
     int nevents=1000;
 
     // argument parsing
-    std::string help_msg("Usage: ./build/dtc11 [options]\n --help:   display this message.\n --input/-i INPUT_DIRNAME:   Change the input directory name, by default uses input_10k.\n --random-l1 L1-TYPE:   L1-TYPE is boolean, set whether L1 trigger rate random with average of 750kHZ or just constantly 750kHz.\n --no-trigger-rule:   Only effective for the random L1 trigger mode, disables the trigger rules.\n --output-rate RATE-TYPE:   set the output rate for the event builder. RATE-TYPE values can be in {\"nodelay\", \"half\", \"full\"}.");
+    std::string help_msg("Usage: ./build/dtc [options]\n --help:   display this message.\n --input/-i INPUT_DIRNAME:   Change the input directory name, by default uses input_10k.\n --random-l1 L1-TYPE:   L1-TYPE is boolean, set whether L1 trigger rate random with average of 750kHZ or just constantly 750kHz.\n --no-trigger-rule:   Only effective for the random L1 trigger mode, disables the trigger rules.\n --output-rate RATE-TYPE:   set the output rate for the event builder. RATE-TYPE values can be in {\"nodelay\", \"half\", \"full\"}.");
     for (int iarg =0; iarg<argc; iarg++) {
         if (iarg==0) continue;
         if (std::string(argv[iarg])=="--help") {std::cerr<<help_msg<<std::endl; return 0;}
@@ -97,13 +97,14 @@ int main(int argc, char* argv[]) {
     }
 
     // print out parameters and setup the output dir
-    std::string output_dir("output");
+    std::string output_dir("output_");
+    std::size_t pos = 0; 
     if (input_dirname.find("input_") != std::string::npos) {
-        std::size_t pos = input_dirname.find("input_")+5; 
-        std::string input_tag = input_dirname.substr(pos);
-        while(input_tag.back()=='/') input_tag.pop_back();
-        output_dir+=input_tag;
+        pos = input_dirname.find("input_")+6; 
     }
+    std::string input_tag = input_dirname.substr(pos);
+    while(input_tag.back()=='/') input_tag.pop_back();
+    output_dir+=input_tag;
     if (RANDOM_L1) output_dir+="_randomL1"; else output_dir+="_constL1";
     if (RANDOM_L1 && !TRIGGER_RULE)  output_dir+="NoTriggerRule";
     std::cout<<"Running Mode: Randome L1="<<RANDOM_L1<<" TRIGGER_RULE="<<TRIGGER_RULE<<" OUTPUT_RATE=";
@@ -115,26 +116,26 @@ int main(int argc, char* argv[]) {
     std::cout<<" Output dir="<<output_dir<<std::endl;
     create_directories(output_dir);
 
-    // get a list of input files related to dtc11
-    std::vector<std::string> dtc11_binary_fn_list;
+    // get a list of input files related to dtc
+    std::vector<std::string> dtc_binary_fn_list;
     path input_dir(input_dirname);
     for (auto iter_fn=directory_iterator(input_dir); iter_fn != directory_iterator(); iter_fn++) {
         if ( is_directory(iter_fn->path()) ) continue;
         string filename = iter_fn->path().string();
-        if ( filename.find("dtc11") == std::string::npos ) continue;
-        dtc11_binary_fn_list.push_back(filename);
+        if ( filename.find("dtc") == std::string::npos ) continue;
+        dtc_binary_fn_list.push_back(filename);
     }
     // write the order of input filenames into a log file, so that we know which ichip number maps to which physical chip
     std::ofstream log_fn_list(output_dir+"/ordered_file_names.txt");
-    for (auto filename : dtc11_binary_fn_list) log_fn_list<<filename<<std::endl;
+    for (auto filename : dtc_binary_fn_list) log_fn_list<<filename<<std::endl;
     log_fn_list.close();
 
     // Define the circuit
-    int nchips = dtc11_binary_fn_list.size();
-    std::cout<< "Number of chips mapped to DTC 11 = " << nchips <<endl;
-    std::vector<float> elink_chip_ratio(nchips, 3); // All chips connected to DTC 11 has 3 e-links
+    int nchips = dtc_binary_fn_list.size();
+    std::cout<< "Number of chips mapped to DTC = " << nchips <<endl;
+    std::vector<float> elink_chip_ratio(nchips, 3); // All chips connected to DTC has 3 e-links
     auto circuit = std::make_shared<Circuit>();
-    auto player  = std::make_shared<ChipDataPlayer>(dtc11_binary_fn_list, nchips, elink_chip_ratio, RANDOM_L1, TRIGGER_RULE); // there are 60 modules in dtc11
+    auto player  = std::make_shared<ChipDataPlayer>(dtc_binary_fn_list, nchips, elink_chip_ratio, RANDOM_L1, TRIGGER_RULE); // there are 60 modules in dtc
     auto evt_builder  = std::make_shared<DTCEventBuilder>(nchips, OUTPUT_RATE); 
     circuit->add_component(player);
     circuit->add_component(evt_builder);
