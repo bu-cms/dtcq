@@ -6,6 +6,7 @@ import argparse
 import os, sys
 import regex as re
 import pickle as pkl
+from tqdm import tqdm
 
 class Chip:
     def __init__(self, file_name_str):
@@ -27,7 +28,7 @@ class Chip:
         self.chip_id = int(values[5])
 
 def read_nevents_from_dirname(data_dir):
-    pattern = re.compile(".*output_(\d+k?)evt.*")
+    pattern = re.compile(".*_(\d+k?)evt.*")
     result = pattern.match(data_dir)
     if not result:
         raise ValueError("Error: input dir doesn't indicate number of events, should be in format like input_10kevt...")
@@ -35,14 +36,28 @@ def read_nevents_from_dirname(data_dir):
     value = value.replace("k","000")
     return int(value)
 
+def blocks(f, size=65535):
+    while True:
+        b = f.read(size)
+        if not b: break
+        yield b
+
+def count_lines_in_file(f):
+    return sum(b.count("\n") for b in blocks(f))
+
 
 def load_data(data_dir, cache_file_name=""):
     # if there is cache file, load it
     if cache_file_name and os.path.exists(cache_file_name):
-        with open(cache_file_name,'rb') as cache_file:
-            data = pkl.load(cache_file)
-            print("Loaded cheched data from file {}".format(cache_file_name))
-            return data
+        try:
+            with open(cache_file_name,'rb') as cache_file:
+                data = pkl.load(cache_file)
+                print("Loaded cheched data from file {}".format(cache_file_name))
+                assert("h_event_size_perchip" in data.keys())
+                return data
+        except Exception:
+            print("chached data invalid. Reload from original source...")
+            raise Exception
 
     # otherwise we load data as normal
     data = {}
@@ -54,9 +69,12 @@ def load_data(data_dir, cache_file_name=""):
 
     # read the event length from input file
     nevents = read_nevents_from_dirname(data_dir)
-    data["event_size"] = np.zeros(shape=(nchips, nevents),dtype=np.int32)
+    # A fine-binned histogram recording the distribution of event size, maximum=1000
+    data["h_event_size_perchip"] = np.zeros(shape=(nchips, 1000), dtype=int)
+    data["h_event_size_total"] = np.zeros(30000, dtype=int)
+    total_event_sizes = np.zeros(nevents, dtype=int)
     print("Reading event length...")
-    for ichip in range(nchips):
+    for ichip in tqdm(range(nchips)):
         ievent = 0
         with open("../"+data["chip"][ichip].file_name, "rb") as chip_binary_input:
             byte = chip_binary_input.read(8)
@@ -69,32 +87,41 @@ def load_data(data_dir, cache_file_name=""):
                     if len_counting == 0:
                         len_counting += 1
                     else:
-                        data["event_size"][ichip][ievent]=len_counting
+                        data["h_event_size_perchip"][ichip][len_counting]+=1
+                        total_event_sizes[ievent] += len_counting
                         ievent += 1
                         len_counting = 1
                 else:
                     len_counting += 1
                 byte = chip_binary_input.read(8)
             if len_counting > 0:
-                data["event_size"][ichip][ievent]=len_counting
+                data["h_event_size_perchip"][ichip][len_counting]+=1
+                total_event_sizes[ievent] += len_counting
+    # histogramize the totals
+    for event_size in total_event_sizes:
+        data["h_event_size_total"][event_size] += 1
 
     # read the buffer ocupancy from output file
-    # estimating nticks assuming maximum 1000 ticks per event
-    nticks = 1000 * nevents
-    data["buffer_over_time"] = np.zeros(shape=(nchips, nticks),dtype=np.int32)
+    # store in histogram
+    data["h_buffer_size_perchip"] = np.zeros(shape=(nchips, 10000),dtype=int)
+    data["h_buffer_size_total"] = np.zeros(300000,dtype=int)
     input_fn = "{}/output_fifo_data_sizes.txt".format(data_dir)
     print("reading buffer occupancies...")
     with open(input_fn) as f:
+        nlines = count_lines_in_file(f)
+    with open(input_fn) as f:
+        pbar = tqdm(total=nlines)
         for iline,line in enumerate(f.readlines()):
-            if iline >= nticks:
-                nticks = nticks * 2
-                data["buffer_over_time"].resize( (nchips, nticks) )
+            pbar.update(1)
             numbers = line.replace("\n","").split(",")
             assert(nchips == len(numbers))
-            #print(numbers)
+            total_buffer = 0
             for ichip in range(nchips):
-                #print(int(numbers[i]))
-                data["buffer_over_time"][ichip][iline]=int(numbers[ichip])
+                buffer_ichip = int(numbers[ichip])
+                total_buffer += buffer_ichip
+                data["h_buffer_size_perchip"][ichip][buffer_ichip]+=1
+            data["h_buffer_size_total"][total_buffer] += 1
+        pbar.close()
 
     # Save data into cache file
     if cache_file_name:
@@ -126,88 +153,91 @@ def get_perchip_tag(data, ichip):
     perchip_tag += ", Chip_ID={}".format(data["chip"][ichip].chip_id)
     return perchip_tag
 
-def plot_buffer_over_time(data, outdir, args):
-    buffer_over_time_outdir = "{}/buffer-over-time_plots".format(outdir)
-    if not os.path.exists(buffer_over_time_outdir):
-        os.makedirs(buffer_over_time_outdir)
-    fig,ax = plt.subplots(1,1)
-    total_buffer_over_time = np.zeros(len(data["buffer_over_time"][0]),dtype=np.int32)
-    # Plot for inidvidual FIFO
-    for ichip,buffer_over_time in enumerate(data["buffer_over_time"]):
-        total_buffer_over_time += buffer_over_time
-        if args.total_only: continue
-        x = np.arange(len(buffer_over_time))
-        ax.plot(x,buffer_over_time*64/1024)
-        plot_file_name = "{}/{}.png".format(buffer_over_time_outdir, data["chip"][ichip].basename)
-        ax.set_xlabel("clock tick")
-        ax.set_ylabel("buffer occupancy (kb)")
-        perchip_tag = get_perchip_tag(data, ichip)
-        ax.text(0.5, 0.7, perchip_tag, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
-        fig.savefig(plot_file_name)
-        print("{} saved.".format(plot_file_name))
-        ax.clear()
-    # Plot for total 
-    x = np.arange(len(total_buffer_over_time))
-    ax.plot(x,total_buffer_over_time*64/1024)
-    plot_file_name = "{}/DTC11Total.png".format(buffer_over_time_outdir)
-    ax.set_xlabel("clock tick")
-    ax.set_ylabel("buffer occupancy (kb)")
-    ax.text(0.5, 0.7, "Sum of FIFO occupancies", horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
-    fig.savefig(plot_file_name)
-    print("{} saved.".format(plot_file_name))
-    ax.clear()
-    return
+def is_sorted(iterable):
+    for ientry in range(len(iterable)-1):
+        if iterable[ientry] > iterable[ientry+1]:
+            return False
+    return True
+
+def rebin_histogram(old_counts, new_bins, old_bins=None, input_density=True, output_density=True):
+    # by default old_bins is a uniform binning with binwidth=1 and starting from 0
+    if old_bins == None:
+        old_bins = np.arange(len(old_counts)+1)
+    assert(len(old_counts)+1 == len(old_bins))
+    assert(is_sorted(old_bins))
+    assert(is_sorted(new_bins))
+    old_counts_copy = np.copy(old_counts)
+    old_bin_width = np.array(old_bins[1:]) - np.array(old_bins[:-1])
+    new_bin_width = np.array(new_bins[1:]) - np.array(new_bins[:-1])
+    if input_density:
+        old_counts_copy = old_counts_copy * old_bin_width
+    new_counts = np.zeros(len(new_bins)-1)
+    newbin_locator = 0
+    for ioldbin in range(len(old_counts_copy)):
+        old_low_edge = old_bins[ioldbin]
+        old_high_edge = old_bins[ioldbin+1]
+        if newbin_locator >= len(new_bins)-1:
+            break
+        while new_bins[newbin_locator+1] <= old_low_edge and newbin_locator<len(new_bins)-1:
+            newbin_locator += 1
+        while new_bins[newbin_locator] < old_high_edge and newbin_locator<len(new_bins)-1:
+            new_counts[newbin_locator] += old_counts_copy[ioldbin] * (min(old_high_edge, new_bins[newbin_locator+1]) - max(old_low_edge, new_bins[newbin_locator])) / old_bin_width[ioldbin]
+            newbin_locator += 1
+    if output_density:
+        new_counts = new_counts / np.sum(new_counts)
+        new_counts = new_counts / new_bin_width
+    return new_counts
+
+def find_max_nonzero_bin(iterable):
+    return np.max(iterable.nonzero()[-1])
 
 def plot_buffer_distribution(data, outdir, args, data_to_compare=None, labels_for_comparison=("ver1", "ver2")):
     buffer_dist_outdir = "{}/buffer_distribution_plots".format(outdir)
-    if args.add_buffer_all_tick:
-        buffer_dist_outdir += "_hasAllTick"
-    if args.no_buffer_peak:
-        buffer_dist_outdir += "_noPeakDist"
     if args.no_event_length:
         buffer_dist_outdir += "_noEvtLength"
-    if args.cumulative_use_all:
-        buffer_dist_outdir += "_cumulativeAllTick"
+    if args.only_event_length:
+        buffer_dist_outdir += "_onlyEvtLength"
     if args.no_cumulative:
         buffer_dist_outdir += "_noCumulative"
     if not os.path.exists(buffer_dist_outdir):
         os.makedirs(buffer_dist_outdir)
+
+    nchips = len(data["chip"])
+
+    # Setup binning
+    max_perchip_buffer  = find_max_nonzero_bin(data["h_buffer_size_perchip"])
+    max_perchip_evtsize = find_max_nonzero_bin(data[ "h_event_size_perchip"])
+    binning_buffer  = np.arange(0,4+max_perchip_buffer,2)
+    binning_evtsize = np.arange(0,4+max_perchip_evtsize,2)
+    h_buffer_size_perchip = np.zeros(shape=(nchips, len(binning_buffer)-1))
+    h_event_size_perchip  = np.zeros(shape=(nchips, len(binning_evtsize)-1))
+    for ichip in range(nchips):
+        h_buffer_size_perchip[ichip] = rebin_histogram(data["h_buffer_size_perchip"][ichip], binning_buffer)
+        h_event_size_perchip[ichip]  = rebin_histogram(data[ "h_event_size_perchip"][ichip], binning_evtsize)
+
     fig, ax = plt.subplots()
 
     # Plot for individual fifos
-    max_single_chip_buffer = np.max(data["buffer_over_time"])
-    max_single_chip_evtsize = np.max(data["event_size"])
-    binning_buffer  = np.arange(0,4+max_single_chip_buffer,2)
-    binning_evtsize = np.arange(0,4+max_single_chip_evtsize,2)
-    max_xlim = 300
-    for ichip in range(len(data["chip"])):
+    for ichip in range(nchips):
         if args.total_only:
             continue
         ax.clear()
         output_filename = "{}/bufferplot_ichip{}.png".format(outdir, data["chip"][ichip].basename)
-        h_event_length,_ = np.histogram(data["event_size"][ichip], bins=binning_evtsize, density=True)
+        max_xlim = 300
         if not args.no_event_length:
-            ax.plot(binning_evtsize[:-1]/16, h_event_length, label="event length")
+            ax.plot(binning_evtsize[:-1]/16, h_event_size_perchip[ichip], label="event length")
             max_xlim = max(max_xlim, max(binning_evtsize))
-        h_buffering_size,_ = np.histogram(data["buffer_over_time"][ichip], bins=binning_buffer, density=True)
-        if args.add_buffer_all_tick:
-            ax.plot(binning_buffer[:-1]/16 , h_buffering_size, label="fifo capacity")
+        if not args.only_event_length:
+            ax.plot(binning_buffer[:-1]/16 , h_buffer_size_perchip[ichip], label="fifo capacity")
             max_xlim = max(max_xlim, max(binning_buffer))
-        h_buffering_local_maximum,_ = np.histogram(find_local_maximum(data["buffer_over_time"][ichip]), bins=binning_buffer, density=True)
-        if not args.no_buffer_peak:
-            ax.plot(binning_buffer[:-1]/16, h_buffering_local_maximum, label="fifo capacity at local maximum")
-            max_xlim = max(max_xlim, max(binning_buffer))
-        # Plot cumulative
-        if not args.no_cumulative:
-            h_cumulative = np.zeros(len(h_buffering_size),dtype=np.float32)
-            if args.cumulative_use_all:
-                h_normed = (binning_buffer[1:] - binning_buffer[:-1]) * h_buffering_size
-            else:
-                h_normed = (binning_buffer[1:] - binning_buffer[:-1]) * h_buffering_local_maximum
-            for ibin in range(len(h_cumulative)):
-                h_cumulative[ibin] = sum(h_normed[ibin:])
-            ax.plot(binning_buffer[:-1]/16, h_cumulative, label="comprehensive cumulative")
-            max_xlim = max(max_xlim, max(binning_buffer))
+            # Plot cumulative
+            if not args.no_cumulative:
+                h_cumulative = np.zeros(len(h_buffer_size_perchip[ichip]),dtype=np.float32)
+                h_normed = (binning_buffer[1:] - binning_buffer[:-1]) * h_buffer_size_perchip[ichip]
+                for ibin in range(len(h_cumulative)):
+                    h_cumulative[ibin] = sum(h_normed[ibin:])
+                ax.plot(binning_buffer[:-1]/16, h_cumulative, label="comprehensive cumulative")
+                max_xlim = max(max_xlim, max(binning_buffer))
         ax.legend()
         ax.set_xlim(0,max_xlim/16)
         ax.set_yscale('log')
@@ -220,41 +250,31 @@ def plot_buffer_distribution(data, outdir, args, data_to_compare=None, labels_fo
         print("{} saved.".format(output_filename))
     
     # Plot for combination of fifos:
-    fifo_sizes_combined = np.zeros(len(data["buffer_over_time"][0]),dtype=np.int32)
-    event_length_combined = np.zeros(len(data["event_size"][0]),dtype=np.int32)
-    for ichip in range(len(data["buffer_over_time"])):
-        fifo_sizes_combined += np.array(data["buffer_over_time"][ichip])
-        event_length_combined += np.array(data["event_size"][ichip])
-        #print("event length ichip {}:".format(ichip))
-        #print(data["event_size"][ichip])
-        #print("event length combined:")
-        #print(event_length_combined)
+    # Setup binning
+    max_total_buffer  = find_max_nonzero_bin(data["h_buffer_size_total"])
+    max_total_evtsize = find_max_nonzero_bin(data["h_event_size_total" ])
+    binning_buffer  = np.arange(0,40+max_total_buffer,20)
+    binning_buffer  = np.arange(0,40+max_total_buffer,20)
+    binning_evtsize = np.arange(0,40+max_total_evtsize,20)
+    h_buffer_size_total = rebin_histogram(data["h_buffer_size_total"], binning_buffer)
+    h_event_size_total  = rebin_histogram(data[ "h_event_size_total"], binning_evtsize)
+
     ax.clear()
-    binning_buffer  = np.arange(0,10+max(fifo_sizes_combined),5)
-    binning_evtsize = np.arange(0,10+max(event_length_combined),5)
-    h_event_length,_ = np.histogram(event_length_combined, bins=binning_evtsize, density=True)
+    max_xlim = 300
     if not args.no_event_length:
-        ax.plot(binning_evtsize[:-1]/16, h_event_length, label="event length")
+        ax.plot(binning_evtsize[:-1]/16, h_event_size_total, label="event length")
         max_xlim = max(max_xlim, max(binning_evtsize))
-    h_buffering_size,_ = np.histogram(fifo_sizes_combined, bins=binning_buffer, density=True)
-    if args.add_buffer_all_tick:
-        ax.plot(binning_buffer[:-1]/16 , h_buffering_size, label="fifo capacity")
+    if not args.only_event_length:
+        ax.plot(binning_buffer[:-1]/16 , h_buffer_size_total, label="fifo capacity")
         max_xlim = max(max_xlim, max(binning_buffer))
-    h_buffering_local_maximum,_ = np.histogram(find_local_maximum(fifo_sizes_combined), bins=binning_buffer, density=True)
-    if not args.no_buffer_peak:
-        ax.plot(binning_buffer[:-1]/16, h_buffering_local_maximum, label="fifo capacity at local maximum")
-        max_xlim = max(max_xlim, max(binning_buffer))
-    # Plot cumulative
-    if not args.no_cumulative:
-        h_cumulative = np.zeros(len(h_buffering_size),dtype=np.float32)
-        if args.cumulative_use_all:
-            h_normed = (binning_buffer[1:] - binning_buffer[:-1]) * h_buffering_size
-        else:
-            h_normed = (binning_buffer[1:] - binning_buffer[:-1]) * h_buffering_local_maximum
-        for ibin in range(len(h_cumulative)):
-            h_cumulative[ibin] = sum(h_normed[ibin:])
-        ax.plot(binning_buffer[:-1]/16, h_cumulative, label="comprehensive cumulative")
-        max_xlim = max(max_xlim, max(binning_buffer))
+        # Plot cumulative
+        if not args.no_cumulative:
+            h_cumulative = np.zeros(len(h_buffer_size_total),dtype=np.float32)
+            h_normed = (binning_buffer[1:] - binning_buffer[:-1]) * h_buffer_size_total
+            for ibin in range(len(h_cumulative)):
+                h_cumulative[ibin] = sum(h_normed[ibin:])
+            ax.plot(binning_buffer[:-1]/16, h_cumulative, label="comprehensive cumulative")
+            max_xlim = max(max_xlim, max(binning_buffer))
     ax.legend()
     ax.set_xlim(0,max_xlim/16)
     ax.set_yscale('log')
@@ -269,13 +289,9 @@ def plot_buffer_distribution(data, outdir, args, data_to_compare=None, labels_fo
 def commandline():
     parser = argparse.ArgumentParser(prog='Plotter.')
     parser.add_argument('inpath', type=str, help='Input folder to use.')
-    parser.add_argument('--add-buffer-all-tick', action='store_true', help='In the buffer distribution plot, add the line that include buffer size at all ticks (including trivial cases)')
-    parser.add_argument('--no-buffer-peak', action='store_true', help='In the buffer distribution plot, remove the line that include only buffer size at peaks')
     parser.add_argument('--no-event-length', action='store_true', help='In the buffer distribution plot, remove the line that shows the distribution of event length.')
+    parser.add_argument('--only-event-length', action='store_true', help='In the buffer distribution plot, keep only the line that shows the distribution of event length.')
     parser.add_argument('--no-cumulative', action='store_true', help='Remove the line that shows the cumulative plot of buffer peak distribution.')
-    parser.add_argument('--cumulative-use-all', action='store_true', help='Cumulative plot use buffer size from all peaks instead of peak-only.')
-    parser.add_argument('--skip-buffer-dist', action='store_true', help='Skip the buffer distribution plot.')
-    parser.add_argument('--skip-buffer-over-time', action='store_true', help='Skip the buffer-over-time plot.')
     parser.add_argument('--total-only', action='store_true', help='Plot only the plot for the sum of buffering between all fifos.')
     parser.add_argument('--tag', type=str, default="", help='Add a tag to be appeneded to the output dir name')
     parser.add_argument('--compare', type=str, default="", help='Compare to a different version, use the path that include the output plots. Comparison is done in buffer distribution plot only.')
@@ -293,10 +309,9 @@ def main():
         os.makedirs(outdir)
     cache_file_name = "{}/data.pkl".format(outdir)
     data = load_data(args.inpath, cache_file_name)
-    if not args.skip_buffer_dist:
-        plot_buffer_distribution(data, outdir, args)
-    if not args.skip_buffer_over_time:
-        plot_buffer_over_time(data, outdir, args)
+    if args.no_event_length and args.only_event_length:
+        raise ValueError
+    plot_buffer_distribution(data, outdir, args)
     return
 
 if __name__ == "__main__":
