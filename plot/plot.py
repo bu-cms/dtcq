@@ -70,8 +70,9 @@ def load_data(data_dir, cache_file_name=""):
     # read the event length from input file
     nevents = read_nevents_from_dirname(data_dir)
     # A fine-binned histogram recording the distribution of event size, maximum=1000
-    data["h_event_size_perchip"] = np.zeros(shape=(nchips, 1000), dtype=int)
-    data["h_event_size_total"] = np.zeros(30000, dtype=int)
+    maxsize_perchip = 1000
+    maxsize_total = int(nchips * maxsize_perchip / 2)
+    data["h_event_size_perchip"] = np.zeros(shape=(nchips, maxsize_perchip), dtype=int)
     total_event_sizes = np.zeros(nevents, dtype=int)
     print("Reading event length...")
     for ichip in tqdm(range(nchips)):
@@ -87,6 +88,9 @@ def load_data(data_dir, cache_file_name=""):
                     if len_counting == 0:
                         len_counting += 1
                     else:
+                        while len_counting >= len(data["h_event_size_perchip"][ichip]):
+                            # double the size of array if not enough
+                            data["h_event_size_perchip"] = np.concatenate((data["h_event_size_perchip"], np.zeros_like(data["h_event_size_perchip"])), axis=1)
                         data["h_event_size_perchip"][ichip][len_counting]+=1
                         total_event_sizes[ievent] += len_counting
                         ievent += 1
@@ -98,13 +102,16 @@ def load_data(data_dir, cache_file_name=""):
                 data["h_event_size_perchip"][ichip][len_counting]+=1
                 total_event_sizes[ievent] += len_counting
     # histogramize the totals
+    data["h_event_size_total"] = np.zeros(np.max(total_event_sizes)+1, dtype=int)
     for event_size in total_event_sizes:
         data["h_event_size_total"][event_size] += 1
 
     # read the buffer ocupancy from output file
     # store in histogram
-    data["h_buffer_size_perchip"] = np.zeros(shape=(nchips, 10000),dtype=int)
-    data["h_buffer_size_total"] = np.zeros(300000,dtype=int)
+    maxsize_perchip = 10000
+    maxsize_total = int(nchips * maxsize_perchip / 2)
+    data["h_buffer_size_perchip"] = np.zeros(shape=(nchips, maxsize_perchip),dtype=int)
+    data["h_buffer_size_total"] = np.zeros(maxsize_total,dtype=int)
     input_fn = "{}/output_fifo_data_sizes.txt".format(data_dir)
     print("reading buffer occupancies...")
     with open(input_fn) as f:
@@ -119,7 +126,13 @@ def load_data(data_dir, cache_file_name=""):
             for ichip in range(nchips):
                 buffer_ichip = int(numbers[ichip])
                 total_buffer += buffer_ichip
+                while buffer_ichip >= len(data["h_buffer_size_perchip"][ichip]):
+                    # double the size of array if not enough
+                    data["h_buffer_size_perchip"] = np.concatenate((data["h_buffer_size_perchip"], np.zeros_like(data["h_buffer_size_perchip"])), axis=1)
                 data["h_buffer_size_perchip"][ichip][buffer_ichip]+=1
+            while total_buffer >= len(data["h_buffer_size_total"]):
+                # double the size of array if not enough
+                data["h_buffer_size_total"] = np.concatenate((data["h_buffer_size_total"], np.zeros_like(data["h_buffer_size_total"])), axis=0)
             data["h_buffer_size_total"][total_buffer] += 1
         pbar.close()
 
@@ -286,6 +299,16 @@ def plot_buffer_distribution(data, outdir, args, data_to_compare=None, labels_fo
     print("{} saved.".format(output_filename))
     return
 
+def log_average_event_size(data, outdir):
+    nchips = len(data["chip"])
+    with open("{}/eventsize.log".format(outdir),"w") as ostream:
+        for ichip in range(nchips):
+            h_event_size_perchip = data["h_event_size_perchip"][ichip]
+            avg_evt_size = np.sum(np.arange(len(h_event_size_perchip)) * h_event_size_perchip) / np.sum(h_event_size_perchip)
+            ostream.write(data["chip"][ichip].basename)
+            ostream.write("\t{:3.2f}\n".format(avg_evt_size))
+    print("logged average event size in {}/eventsize.log".format(outdir))
+
 def commandline():
     parser = argparse.ArgumentParser(prog='Plotter.')
     parser.add_argument('inpath', type=str, help='Input folder to use.')
@@ -293,6 +316,7 @@ def commandline():
     parser.add_argument('--only-event-length', action='store_true', help='In the buffer distribution plot, keep only the line that shows the distribution of event length.')
     parser.add_argument('--no-cumulative', action='store_true', help='Remove the line that shows the cumulative plot of buffer peak distribution.')
     parser.add_argument('--total-only', action='store_true', help='Plot only the plot for the sum of buffering between all fifos.')
+    parser.add_argument('--log-average-event-size', action='store_true', help='generate a log file containing average event size for each chip')
     parser.add_argument('--tag', type=str, default="", help='Add a tag to be appeneded to the output dir name')
     parser.add_argument('--compare', type=str, default="", help='Compare to a different version, use the path that include the output plots. Comparison is done in buffer distribution plot only.')
     args = parser.parse_args()
@@ -311,6 +335,9 @@ def main():
     data = load_data(args.inpath, cache_file_name)
     if args.no_event_length and args.only_event_length:
         raise ValueError
+    if args.log_average_event_size:
+        log_average_event_size(data, outdir)
+        return
     plot_buffer_distribution(data, outdir, args)
     return
 
