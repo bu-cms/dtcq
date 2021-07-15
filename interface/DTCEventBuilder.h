@@ -21,11 +21,11 @@ public:
     std::vector<OutputPort<bool>> out_read_data;
     std::vector<OutputPort<bool>> out_read_control ;
     OutputPort<bool> out_event_ready ;
-    DTCEventBuilder(int _nchips, int output_rate);
+    DTCEventBuilder(int _nchips, int output_links);
     void tick() override ;
 private:
     int nchips;
-    const int OUTPUT_RATE;
+    const int OUTPUT_LINKS;
     std::vector<int> words_to_read;
     std::vector<int> buffer_counter; // instead of an actual buffer
     std::vector<bool> control_full_event;

@@ -2,16 +2,16 @@
 
 using namespace std;
 
-DTCEventBuilder::DTCEventBuilder(int _nchips, int output_rate) : Component(), in_data_valid(_nchips), in_data(_nchips), in_control_valid(_nchips), in_control(_nchips), out_read_data(_nchips), out_read_control(_nchips),
+DTCEventBuilder::DTCEventBuilder(int _nchips, int output_links) : Component(), in_data_valid(_nchips), in_data(_nchips), in_control_valid(_nchips), in_control(_nchips), out_read_data(_nchips), out_read_control(_nchips),
 words_to_read(_nchips, 0), 
 control_full_event(_nchips, false), 
 read_control_last_time(_nchips, false), 
 read_data_last_time(_nchips, false), 
 buffer_counter(_nchips, 0),
 control_new_event_header(_nchips, false),
-OUTPUT_RATE(output_rate) {
+OUTPUT_LINKS(output_links) {
     nchips = _nchips;
-    WORD_PER_CLOCK_TICK_TO_SEND_EVENT = 8 * OUTPUT_RATE;// equals to number of output links with 25GB/s speed. By design this can be up to 16.
+    WORD_PER_CLOCK_TICK_TO_SEND_EVENT = OUTPUT_LINKS;// equals to number of output links with 25GB/s speed. By design this can be up to 16.
     for (int ichip=0; ichip<nchips; ichip++) {
         add_output( &(out_read_data[ichip]) );
         add_output( &(out_read_control[ichip]) );
