@@ -10,7 +10,7 @@ ChipDataPlayer::ChipDataPlayer(vector<string> file_name_list, int _nchips, vecto
         add_output( &(out_read[ichip]) );
         add_output( &(out_data[ichip]) );
         assert( elink_chip_ratio[ichip]>0 );
-        ticks_per_word.push_back( int(ticks_per_word_per_elink/elink_chip_ratio[ichip]) );
+        ticks_per_word.push_back( int(1.0*ticks_per_word_per_elink/elink_chip_ratio[ichip]) );
         std::ifstream* new_stream = new std::ifstream(file_name_list[ichip].c_str(), std::ios::binary);
         if (!bool(*new_stream)) throw std::invalid_argument((string("Unable to open file ")+file_name_list[ichip]).c_str());
         input_streams.push_back( new_stream );
@@ -54,7 +54,9 @@ void ChipDataPlayer::tick() {
             for (int i=0; i<time_since_recent_L1As.size(); i++) time_since_recent_L1As[i]++;
             if (time_since_recent_L1As.size()>0 && time_since_recent_L1As.front()>trigger_rule_bunch_period) time_since_recent_L1As.pop_front();
             int new_rand = rand();
-            if (time_since_recent_L1As.size()<trigger_rule_max_L1As && bunch_not_empty[nbunch] && rand()%int(min_ticks_per_event/10)==0) {
+            // first event always trigger, otherwise depends on the toss and trigger rule
+            if ((time_since_recent_L1As.size()<trigger_rule_max_L1As && bunch_not_empty[nbunch] && rand()%int(min_ticks_per_event/10)==0) || (nticks==0)) {
+                cerr<<"New event triggered!"<<endl;
                 triggered_events ++;
                 if (TRIGGER_RULE) time_since_recent_L1As.push_back(0);
             }
@@ -65,7 +67,7 @@ void ChipDataPlayer::tick() {
     for (int ichip=0; ichip<nchips; ichip++) {
         // Condition to read a new word: 1. File not at EOF; 2. matches ticks_per_word to be consistent with e-link speed 3. Does not exceed trigger rate
         bool trigger_condition = false;
-        if (RANDOM_L1)  trigger_condition = (triggered_events > nevents[ichip]);
+        if (RANDOM_L1)  trigger_condition = (triggered_events >= nevents[ichip]);
         else trigger_condition = ( (min_ticks_per_event+nticks)/(1+nevents[ichip]) >= min_ticks_per_event );
         // start over if at the end of input file
         if ( input_streams[ichip]->eof() ) {
@@ -73,19 +75,29 @@ void ChipDataPlayer::tick() {
             input_streams[ichip]->seekg(0);
         }
         if ( (!input_streams[ichip]->eof()) && (nticks%ticks_per_word[ichip]==0) && trigger_condition) {
-            value = 0;
-            input_streams[ichip]->read( reinterpret_cast<char*>(&value), sizeof(value) ) ;
-            if(value & (((uint64_t)1)<<63)) nevents[ichip]++;
-            bitset<64> b_value(value);
-            //std::cout<<"Event player chip "<<ichip<<" data = "<<b_value<<std::endl;
-            //std::cout<<"Event player chip "<<ichip<<" input file get single character = "<<input_streams[ichip]->get()<<std::endl;
-            out_read[ichip].set_value(true);
-            out_data[ichip].set_value(value);
+            if (buffer_for_first_word_in_stream>0) {
+                value = buffer_for_first_word_in_stream;
+                buffer_for_first_word_in_stream = 0;
+            }
+            else {
+                value = 0;
+                input_streams[ichip]->read( reinterpret_cast<char*>(&value), sizeof(value) ) ;
+                if(value & (((uint64_t)1)<<63)) {
+                    nevents[ichip]++;
+                    if (nevents[ichip] > triggered_events) buffer_for_first_word_in_stream = value;
+                }
+                //bitset<64> b_value(value);
+                //std::cout<<"Event player chip "<<ichip<<" data = "<<b_value<<std::endl;
+                //std::cout<<"Event player chip "<<ichip<<" input file get single character = "<<input_streams[ichip]->get()<<std::endl;
+            }
+            if (triggered_events >= nevents[ichip]) {
+                out_read[ichip].set_value(true);
+                out_data[ichip].set_value(value);
+                continue;
+            }
         }
-        else {
-            out_read[ichip].set_value(false);
-            out_data[ichip].set_value(0);
-        }
+        out_read[ichip].set_value(false);
+        out_data[ichip].set_value(0);
     }
     nticks ++;
 }

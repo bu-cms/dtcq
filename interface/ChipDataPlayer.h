@@ -32,6 +32,7 @@ private:
     std::vector<std::ifstream*> input_streams;
     std::vector<int> nevents;
     uint64_t value;
+    uint64_t buffer_for_first_word_in_stream=0; // in case we encounter the first word of the next stream which is not triggered
     static const int ticks_per_word_per_elink = 20; // assuming all chip has rate of 1.28Gbps, 400M * 64 / 1.28G = 20
     std::vector<int> ticks_per_word; //ticks_per_word_per_elink divided by e-link-to-chip ratio
     static const int min_ticks_per_event =  533; // 400M / 750k = 533.3
