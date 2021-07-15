@@ -11,6 +11,8 @@ buffer_counter(_nchips, 0),
 control_new_event_header(_nchips, false),
 OUTPUT_LINKS(output_links) {
     nchips = _nchips;
+    static int instances {0};
+    ID = instances++;
     WORD_PER_CLOCK_TICK_TO_SEND_EVENT = OUTPUT_LINKS;// equals to number of output links with 25GB/s speed. By design this can be up to 16.
     for (int ichip=0; ichip<nchips; ichip++) {
         add_output( &(out_read_data[ichip]) );
@@ -68,4 +70,8 @@ void DTCEventBuilder::tick() {
             }
         }
     }
+}
+
+int DTCEventBuilder::get_ID() {
+    return ID;
 }
