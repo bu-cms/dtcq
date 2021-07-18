@@ -56,7 +56,6 @@ void ChipDataPlayer::tick() {
             int new_rand = rand();
             // first event always trigger, otherwise depends on the toss and trigger rule
             if ((time_since_recent_L1As.size()<trigger_rule_max_L1As && bunch_not_empty[nbunch] && rand()%int(min_ticks_per_event/10)==0) || (nticks==0)) {
-                cerr<<"New event triggered!"<<endl;
                 triggered_events ++;
                 if (TRIGGER_RULE) time_since_recent_L1As.push_back(0);
             }

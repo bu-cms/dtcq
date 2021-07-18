@@ -18,6 +18,7 @@
 #include <interface/EventBoundaryFinder.h>
 #include <interface/ChipDataPlayer.h>
 #include <interface/DTCEventBuilder.h>
+#include <interface/ChipConfigReader.h>
 
 using namespace std;
 using namespace boost::filesystem;
@@ -25,29 +26,59 @@ using namespace boost::filesystem;
 typedef FIFO<uint64_t> FIFO64;
 typedef FIFO<uint16_t> FIFO16;
 
-bool DEBUG=false;
 
 int main(int argc, char* argv[]) {
 
     // Default parameters
+    bool DEBUG=false;
     bool RANDOM_L1=true;
     bool TRIGGER_RULE=true;
-    enum RATE_TYPE { NODELAY=0, HALF=1, FULL=2 };
-    int OUTPUT_RATE=HALF;
+    int OUTPUT_LINKS=12;
     std::string input_dirname("input_dtc11_10kevt");
+    std::string config_filename("config/default.config");
+    std::string tag("");
     int nevents=1000;
 
     // argument parsing
-    std::string help_msg("Usage: ./build/dtc [options]\n --help:   display this message.\n --input/-i INPUT_DIRNAME:   Change the input directory name, by default uses input_10k.\n --random-l1 L1-TYPE:   L1-TYPE is boolean, set whether L1 trigger rate random with average of 750kHZ or just constantly 750kHz.\n --no-trigger-rule:   Only effective for the random L1 trigger mode, disables the trigger rules.\n --output-rate RATE-TYPE:   set the output rate for the event builder. RATE-TYPE values can be in {\"nodelay\", \"half\", \"full\"}.");
+    std::string help_msg("Usage: ./build/dtc [options]\n\
+            --help:                         display this message.\n\
+            --debug:                        enable some debug output.\n\
+            --input/-i INPUT_DIRNAME:       Change the input directory name, by default uses input_10k.\n\
+            --config/-c CONFIG_FILENAME:    Config file that include n-elinks and n-events-compression per chip, by default uses config/default.config.\n\
+            --nevents/-n N_Events:          Number of events to run before the end of simulation. Default value = 1000.\n\
+            --random-l1 L1-TYPE:            L1-TYPE is boolean, set whether L1 trigger rate random with average of 750kHZ or just constantly 750kHz.\n\
+            --no-trigger-rule:              Only effective for the random L1 trigger mode, disables the trigger rules.\n\
+            --output-links N_OptLinks:      set the number of output optical links, each connects to a event builder. Default value = 12.\n");
     for (int iarg =0; iarg<argc; iarg++) {
         if (iarg==0) continue;
         if (std::string(argv[iarg])=="--help") {std::cerr<<help_msg<<std::endl; return 0;}
+        if (std::string(argv[iarg])=="--debug") {DEBUG=true;continue;}
         if (std::string(argv[iarg])=="--input" || std::string(argv[iarg])=="-i") {
             if (iarg+1 < argc) {
                 input_dirname = argv[++iarg];
             }
             else {
                 std::cerr<<"--input/-i option requires one argument."<<std::endl;
+                return 1;
+            }
+            continue;
+        }
+        if (std::string(argv[iarg])=="--config" || std::string(argv[iarg])=="-c") {
+            if (iarg+1 < argc) {
+                config_filename = argv[++iarg];
+            }
+            else {
+                std::cerr<<"--config/-c option requires one argument."<<std::endl;
+                return 1;
+            }
+            continue;
+        }
+        if (std::string(argv[iarg])=="--tag" || std::string(argv[iarg])=="-t") {
+            if (iarg+1 < argc) {
+                tag = string("_") + argv[++iarg];
+            }
+            else {
+                std::cerr<<"--tag/-t option requires one argument."<<std::endl;
                 return 1;
             }
             continue;
@@ -67,16 +98,13 @@ int main(int argc, char* argv[]) {
             TRIGGER_RULE = false;
             continue;
         }
-        if (std::string(argv[iarg])=="--output-rate") {
+        if (std::string(argv[iarg])=="--output-links") {
             if (iarg+1 < argc) {
-                std::string output_rate_type(argv[++iarg]);
-                if (output_rate_type=="nodelay")   {OUTPUT_RATE=NODELAY; }
-                else if (output_rate_type=="half") {OUTPUT_RATE=HALF;    }
-                else if (output_rate_type=="full") {OUTPUT_RATE=FULL;    }
-                else {std::cerr<<"Unknow argument "<<output_rate_type<<" following option --output-rate."<<std::endl; return 1;}
+                std::string output_links_str(argv[++iarg]);
+                OUTPUT_LINKS = stoi(output_links_str);
             }
             else {
-                std::cerr<<"--output-rate option requires one argument."<<std::endl;
+                std::cerr<<"--output-links option requires one argument."<<std::endl;
                 return 1;
             }
             continue;
@@ -104,13 +132,12 @@ int main(int argc, char* argv[]) {
     }
     std::string input_tag = input_dirname.substr(pos);
     while(input_tag.back()=='/') input_tag.pop_back();
-    output_dir+=input_tag;
+    output_dir+=input_tag+tag;
     if (RANDOM_L1) output_dir+="_randomL1"; else output_dir+="_constL1";
     if (RANDOM_L1 && !TRIGGER_RULE)  output_dir+="NoTriggerRule";
-    std::cout<<"Running Mode: Randome L1="<<RANDOM_L1<<" TRIGGER_RULE="<<TRIGGER_RULE<<" OUTPUT_RATE=";
-    if (OUTPUT_RATE==NODELAY) {std::cout<<"nodelay"; output_dir+="_outputNoDelay"; }
-    if (OUTPUT_RATE==HALF)    {std::cout<<"half";    output_dir+="_outputHalfRate";}
-    if (OUTPUT_RATE==FULL)    {std::cout<<"full";    output_dir+="_outputFullRate";}
+    std::cout<<"Running Mode: Randome L1="<<RANDOM_L1<<" TRIGGER_RULE="<<TRIGGER_RULE<<" OUTPUT_LINKS="<<OUTPUT_LINKS;
+    output_dir+="_olinks";
+    output_dir+=to_string(OUTPUT_LINKS);
     output_dir+="_N";
     output_dir+=to_string(nevents);
     std::cout<<" Output dir="<<output_dir<<std::endl;
@@ -130,21 +157,41 @@ int main(int argc, char* argv[]) {
     for (auto filename : dtc_binary_fn_list) log_fn_list<<filename<<std::endl;
     log_fn_list.close();
 
-    // Define the circuit
+    // read config
     int nchips = dtc_binary_fn_list.size();
     std::cout<< "Number of chips mapped to DTC = " << nchips <<endl;
-    std::vector<float> elink_chip_ratio(nchips, 3); // All chips connected to DTC has 3 e-links
+    ChipConfigReader config(config_filename);
+    // convert filenames to vector of basename (keys used in chip config mapping)
+    std::vector<std::string> chip_basename_list(nchips);
+    std::transform(dtc_binary_fn_list.begin(), dtc_binary_fn_list.end(), chip_basename_list.begin(), ChipConfigReader::filename_to_basename);
+    // assign the chips to the event builders
+    std::vector<int> eb_assignment = config.assign_chips_to_event_builders(chip_basename_list, OUTPUT_LINKS);
+    std::vector<int> nchips_per_eb(OUTPUT_LINKS, 0);
+    std::vector<int> ichip_to_ichip_per_eb(nchips);
+    for (int ichip=0; ichip<nchips; ichip++) {
+        int ieb = eb_assignment[ichip];
+        ichip_to_ichip_per_eb[ichip] = nchips_per_eb[ieb];
+        nchips_per_eb[ieb]++;
+    }
+    // setup circuit and components
     auto circuit = std::make_shared<Circuit>();
+    // read the elink to chip ratio and configure data player accordingly
+    std::vector<float> elink_chip_ratio = config.GetNELinkVector(chip_basename_list); // n-elinks/n-chips for each chip
     auto player  = std::make_shared<ChipDataPlayer>(dtc_binary_fn_list, nchips, elink_chip_ratio, RANDOM_L1, TRIGGER_RULE); // there are 60 modules in dtc
-    auto evt_builder  = std::make_shared<DTCEventBuilder>(nchips, OUTPUT_RATE); 
     circuit->add_component(player);
-    circuit->add_component(evt_builder);
+    std::vector<std::shared_ptr<DTCEventBuilder>> evt_builders;
+    for (int ieb=0; ieb<OUTPUT_LINKS; ieb++) {
+        evt_builders.push_back(std::make_shared<DTCEventBuilder>(nchips_per_eb[ieb], 1)); 
+        circuit->add_component(evt_builders[ieb]);
+    }
 
     std::vector<std::shared_ptr<FIFO64>>              fifos_input;
     std::vector<std::shared_ptr<FIFO64>>              fifos_output_data;
     std::vector<std::shared_ptr<FIFO16>>               fifos_output_control;
     std::vector<std::shared_ptr<EventBoundaryFinder>>  ebfs;
     for (int ichip=0; ichip<nchips; ichip++){
+        int ieb = eb_assignment[ichip];
+        int ichip_per_eb = ichip_to_ichip_per_eb[ichip];
         fifos_input.push_back(std::make_shared<FIFO64>());
         fifos_output_data.push_back(std::make_shared<FIFO64>());
         fifos_output_control.push_back(std::make_shared<FIFO16>());
@@ -165,16 +212,17 @@ int main(int argc, char* argv[]) {
         ebfs[ichip]->out_fifo_o2_data.connect( &(fifos_output_control[ichip]->in_data) );
         ebfs[ichip]->out_fifo_o2_read.connect( &(fifos_output_control[ichip]->in_push_enable) );
         // Output FIFO <-> Event Builder
-        fifos_output_data[ichip]->out_data.connect( &(evt_builder->in_data[ichip]) );
-        fifos_output_data[ichip]->out_data_valid.connect( &(evt_builder->in_data_valid[ichip]) );
-        fifos_output_control[ichip]->out_data.connect( &(evt_builder->in_control[ichip]) );
-        fifos_output_control[ichip]->out_data_valid.connect( &(evt_builder->in_control_valid[ichip]) );
-        evt_builder->out_read_data[ichip].connect( &(fifos_output_data[ichip]->in_pop_enable) );
-        evt_builder->out_read_control[ichip].connect( &(fifos_output_control[ichip]->in_pop_enable) );
+        fifos_output_data[ichip]->out_data.connect( &(evt_builders[ieb]->in_data[ichip_per_eb]) );
+        fifos_output_data[ichip]->out_data_valid.connect( &(evt_builders[ieb]->in_data_valid[ichip_per_eb]) );
+        fifos_output_control[ichip]->out_data.connect( &(evt_builders[ieb]->in_control[ichip_per_eb]) );
+        fifos_output_control[ichip]->out_data_valid.connect( &(evt_builders[ieb]->in_control_valid[ichip_per_eb]) );
+        evt_builders[ieb]->out_read_data[ichip_per_eb].connect( &(fifos_output_data[ichip]->in_pop_enable) );
+        evt_builders[ieb]->out_read_control[ichip_per_eb].connect( &(fifos_output_control[ichip]->in_pop_enable) );
     }
     int inactive_time = 0;
     unsigned long long i_tick = 0;
-    int i_event = 0;
+    std::vector<int> i_event_per_eb(evt_builders.size(),0);
+    int i_event = 0; //technically going to be the min value in i_event_per_eb
     std::ofstream outputsize_input_fifo(output_dir+"/input_fifo_sizes.txt");
     if (!outputsize_input_fifo) {std::cerr<<"Unable to write to "<<output_dir+"/input_fifo_sizes.txt"<<std::endl; return 4;}
     std::ofstream outputsize_output_fifo_data(output_dir+"/output_fifo_data_sizes.txt");
@@ -253,8 +301,13 @@ int main(int argc, char* argv[]) {
         };
         outputsize_input_fifo<<endl;
         outputsize_output_fifo_data<<endl;
-        if (evt_builder->out_event_ready.get_value()) {
-            i_event++;
+        for (int ieb=0; ieb<evt_builders.size(); ieb++) if (evt_builders[ieb]->out_event_ready.get_value()) {
+            i_event_per_eb[ieb]++;
+        }
+        int min_i_event_among_eb = *std::min_element(i_event_per_eb.begin(), i_event_per_eb.end());
+        //if (i_tick%5000==0)cerr<<min_i_event_among_eb<<endl;
+        if (min_i_event_among_eb > i_event) {
+            i_event = min_i_event_among_eb;
             // progress bar
             int barWidth = 70;
             std::cout << "[";
