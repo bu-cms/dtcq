@@ -46,9 +46,9 @@ def count_lines_in_file(f):
     return sum(b.count("\n") for b in blocks(f))
 
 
-def load_data(data_dir, cache_file_name=""):
+def load_data(data_dir, cache_file_name="", force_reload=False):
     # if there is cache file, load it
-    if cache_file_name and os.path.exists(cache_file_name):
+    if cache_file_name and os.path.exists(cache_file_name) and not force_reload:
         try:
             with open(cache_file_name,'rb') as cache_file:
                 data = pkl.load(cache_file)
@@ -118,7 +118,7 @@ def load_data(data_dir, cache_file_name=""):
         nlines = count_lines_in_file(f)
     with open(input_fn) as f:
         pbar = tqdm(total=nlines)
-        for iline,line in enumerate(f.readlines()):
+        for line in f:
             pbar.update(1)
             numbers = line.replace("\n","").split(",")
             assert(nchips == len(numbers))
@@ -262,6 +262,31 @@ def plot_buffer_distribution(data, outdir, args, data_to_compare=None, labels_fo
         fig.savefig(output_filename)
         print("{} saved.".format(output_filename))
     
+    # Plot the sum of histograms
+    h_buffer_size_histsum = h_buffer_size_perchip.sum(axis=0)
+    ax.clear()
+    max_xlim = 300
+    if not args.only_event_length:
+        ax.plot(binning_buffer[:-1]/16 , h_buffer_size_histsum, label="fifo capacity")
+        max_xlim = max(max_xlim, max(binning_buffer))
+        # Plot cumulative
+        if not args.no_cumulative:
+            h_cumulative = np.zeros(len(h_buffer_size_histsum),dtype=np.float32)
+            h_normed = (binning_buffer[1:] - binning_buffer[:-1]) * h_buffer_size_histsum
+            for ibin in range(len(h_cumulative)):
+                h_cumulative[ibin] = sum(h_normed[ibin:])
+            ax.plot(binning_buffer[:-1]/16, h_cumulative, label="comprehensive cumulative")
+            max_xlim = max(max_xlim, max(binning_buffer))
+        ax.legend()
+        ax.set_xlim(0,max_xlim/16)
+        ax.set_yscale('log')
+        ax.set_title("fifos histo sum")
+        ax.set_xlabel("buffer capacity (kb)")
+        ax.set_ylabel("density")
+        output_filename = "{}/HistSum.png".format(buffer_dist_outdir)
+        fig.savefig(output_filename)
+        print("{} saved.".format(output_filename))
+    
     # Plot for combination of fifos:
     # Setup binning
     max_total_buffer  = find_max_nonzero_bin(data["h_buffer_size_total"])
@@ -294,7 +319,7 @@ def plot_buffer_distribution(data, outdir, args, data_to_compare=None, labels_fo
     ax.set_title("fifos combined")
     ax.set_xlabel("buffer capacity (kb)")
     ax.set_ylabel("density")
-    output_filename = "{}/DTC11Total.png".format(buffer_dist_outdir)
+    output_filename = "{}/SizeSum.png".format(buffer_dist_outdir)
     fig.savefig(output_filename)
     print("{} saved.".format(output_filename))
     return
@@ -309,10 +334,25 @@ def log_average_event_size(data, outdir):
             ostream.write("\t{:3.2f}\n".format(avg_evt_size))
     print("logged average event size in {}/eventsize.log".format(outdir))
 
+def plot_nchips_per_eb(inpath, outdir):
+    with open("{}/eb_assignment.txt".format(inpath)) as f:
+        # read the first line
+        line = f.readline().replace("\t\n","")
+        number_strings = line.split("\t")
+        numbers = np.array([int(number_string) for number_string in number_strings])
+        fig, ax = plt.subplots(1,1)
+        plt.hist(numbers)
+        ax.set_xlabel("nchips assigned")
+        ax.set_ylabel("EB counts")
+        plot_filename = "{}/eb_assignment_dist.png".format(outdir)
+        fig.savefig(plot_filename)
+        print("plotted distribution of nchips assigned to event builders as {}".format(plot_filename))
+
 def commandline():
     parser = argparse.ArgumentParser(prog='Plotter.')
     parser.add_argument('inpath', type=str, help='Input folder to use.')
     parser.add_argument('--no-event-length', action='store_true', help='In the buffer distribution plot, remove the line that shows the distribution of event length.')
+    parser.add_argument('--force-reload', action='store_true', help='Force reloading data, even if cache file exists. For example new simulation result produced in the same dir.')
     parser.add_argument('--only-event-length', action='store_true', help='In the buffer distribution plot, keep only the line that shows the distribution of event length.')
     parser.add_argument('--no-cumulative', action='store_true', help='Remove the line that shows the cumulative plot of buffer peak distribution.')
     parser.add_argument('--total-only', action='store_true', help='Plot only the plot for the sum of buffering between all fifos.')
@@ -331,8 +371,9 @@ def main():
     outdir = "{}".format(args.inpath.split("/")[-1])
     if not os.path.exists(outdir):
         os.makedirs(outdir)
+    plot_nchips_per_eb(args.inpath, outdir)
     cache_file_name = "{}/data.pkl".format(outdir)
-    data = load_data(args.inpath, cache_file_name)
+    data = load_data(args.inpath, cache_file_name, args.force_reload)
     if args.no_event_length and args.only_event_length:
         raise ValueError
     if args.log_average_event_size:
