@@ -204,7 +204,7 @@ def rebin_histogram(old_counts, new_bins, old_bins=None, input_density=True, out
 def find_max_nonzero_bin(iterable):
     return np.max(iterable.nonzero()[-1])
 
-def plot_buffer_distribution(data, outdir, args, data_to_compare=None, labels_for_comparison=("ver1", "ver2")):
+def plot_buffer_distribution(data, outdir, args, eb_assignment, data_to_compare=None, labels_for_comparison=("ver1", "ver2")):
     buffer_dist_outdir = "{}/buffer_distribution_plots".format(outdir)
     if args.no_event_length:
         buffer_dist_outdir += "_noEvtLength"
@@ -228,14 +228,29 @@ def plot_buffer_distribution(data, outdir, args, data_to_compare=None, labels_fo
         h_buffer_size_perchip[ichip] = rebin_histogram(data["h_buffer_size_perchip"][ichip], binning_buffer)
         h_event_size_perchip[ichip]  = rebin_histogram(data[ "h_event_size_perchip"][ichip], binning_evtsize)
 
-    fig, ax = plt.subplots()
+    # index mappings between chip and eb
+    ichip_to_ieb = {}
+    ieb_to_ichips = {}
+    for ieb, chip_names in eb_assignment.items():
+        for basename in chip_names:
+            for ichip in range(nchips):
+                if basename == data["chip"][ichip].basename:
+                    ichip_to_ieb[ichip] = ieb
+                    if ieb in ieb_to_ichips.keys():
+                        ieb_to_ichips[ieb].append(ichip)
+                    else:
+                        ieb_to_ichips[ieb] = [ichip,]
 
     # Plot for individual fifos
+    fig, ax = plt.subplots()
     for ichip in range(nchips):
         if args.total_only:
             continue
         ax.clear()
-        output_filename = "{}/bufferplot_ichip{}.png".format(outdir, data["chip"][ichip].basename)
+        ieb = ichip_to_ieb[ichip]
+        ieb_outdir = "{}/eb_{}".format(buffer_dist_outdir, ieb)
+        if not os.path.exists(ieb_outdir):
+            os.makedirs(ieb_outdir)
         max_xlim = 300
         if not args.no_event_length:
             ax.plot(binning_evtsize[:-1]/16, h_event_size_perchip[ichip], label="event length")
@@ -258,34 +273,43 @@ def plot_buffer_distribution(data, outdir, args, data_to_compare=None, labels_fo
         ax.set_ylabel("counts")
         perchip_tag = get_perchip_tag(data, ichip)
         ax.text(0.5, 0.7, perchip_tag, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
-        output_filename = "{}/{}.png".format(buffer_dist_outdir, data["chip"][ichip].basename)
+        output_filename = "{}/{}.png".format(ieb_outdir, data["chip"][ichip].basename)
         fig.savefig(output_filename)
         print("{} saved.".format(output_filename))
     
     # Plot the sum of histograms
-    h_buffer_size_histsum = h_buffer_size_perchip.sum(axis=0)
-    ax.clear()
-    max_xlim = 300
-    if not args.only_event_length:
-        ax.plot(binning_buffer[:-1]/16 , h_buffer_size_histsum, label="fifo capacity")
-        max_xlim = max(max_xlim, max(binning_buffer))
-        # Plot cumulative
-        if not args.no_cumulative:
-            h_cumulative = np.zeros(len(h_buffer_size_histsum),dtype=np.float32)
-            h_normed = (binning_buffer[1:] - binning_buffer[:-1]) * h_buffer_size_histsum
-            for ibin in range(len(h_cumulative)):
-                h_cumulative[ibin] = sum(h_normed[ibin:])
-            ax.plot(binning_buffer[:-1]/16, h_cumulative, label="comprehensive cumulative")
+    for ieb in range(-1, len(ieb_to_ichips)):
+        if ieb == -1:
+            h_buffer_size_histsum = h_buffer_size_perchip.sum(axis=0)
+            ieb_outdir = buffer_dist_outdir
+        else:
+            h_buffer_size_histsum = h_buffer_size_perchip[ieb_to_ichips[ieb]].sum(axis=0)
+            ieb_outdir = "{}/eb_{}".format(buffer_dist_outdir, ieb)
+        ax.clear()
+        max_xlim = 300
+        if not args.only_event_length:
+            ax.plot(binning_buffer[:-1]/16 , h_buffer_size_histsum, label="fifo capacity")
             max_xlim = max(max_xlim, max(binning_buffer))
-        ax.legend()
-        ax.set_xlim(0,max_xlim/16)
-        ax.set_yscale('log')
-        ax.set_title("fifos histo sum")
-        ax.set_xlabel("buffer capacity (kb)")
-        ax.set_ylabel("density")
-        output_filename = "{}/HistSum.png".format(buffer_dist_outdir)
-        fig.savefig(output_filename)
-        print("{} saved.".format(output_filename))
+            # Plot cumulative
+            if not args.no_cumulative:
+                h_cumulative = np.zeros(len(h_buffer_size_histsum),dtype=np.float32)
+                h_normed = (binning_buffer[1:] - binning_buffer[:-1]) * h_buffer_size_histsum
+                for ibin in range(len(h_cumulative)):
+                    h_cumulative[ibin] = sum(h_normed[ibin:])
+                ax.plot(binning_buffer[:-1]/16, h_cumulative, label="comprehensive cumulative")
+                max_xlim = max(max_xlim, max(binning_buffer))
+            ax.legend()
+            ax.set_xlim(0,max_xlim/16)
+            ax.set_yscale('log')
+            ax.set_title("fifos histo sum")
+            ax.set_xlabel("buffer capacity (kb)")
+            ax.set_ylabel("density")
+            if ieb>=0:
+                output_filename = "{}/HistSum_eb{}.png".format(buffer_dist_outdir,ieb)
+            else:
+                output_filename = "{}/HistSum.png".format(buffer_dist_outdir)
+            fig.savefig(output_filename)
+            print("{} saved.".format(output_filename))
     
     # Plot for combination of fifos:
     # Setup binning
@@ -334,19 +358,35 @@ def log_average_event_size(data, outdir):
             ostream.write("\t{:3.2f}\n".format(avg_evt_size))
     print("logged average event size in {}/eventsize.log".format(outdir))
 
-def plot_nchips_per_eb(inpath, outdir):
+# read the text file for the chips' assignments to event builders
+# also plot the distribution of number of chips assigned to each event builder
+def get_eb_assignment(inpath, outdir):
     with open("{}/eb_assignment.txt".format(inpath)) as f:
-        # read the first line
+        # read the first line and plot the distribution
         line = f.readline().replace("\t\n","")
-        number_strings = line.split("\t")
-        numbers = np.array([int(number_string) for number_string in number_strings])
+        nchips_per_eb_strings = line.split("\t")
+        nchips_per_eb = np.array([int(nchips_per_eb_string) for nchips_per_eb_string in nchips_per_eb_strings])
         fig, ax = plt.subplots(1,1)
-        plt.hist(numbers)
+        plt.hist(nchips_per_eb)
         ax.set_xlabel("nchips assigned")
         ax.set_ylabel("EB counts")
         plot_filename = "{}/eb_assignment_dist.png".format(outdir)
         fig.savefig(plot_filename)
         print("plotted distribution of nchips assigned to event builders as {}".format(plot_filename))
+
+        # read the following lines for individual chip assignments
+        neb = len(nchips_per_eb)
+        eb_assignment = {}
+        for ieb in range(neb):
+            line = f.readline().replace("\t\n","")
+            if not line:
+                raise Exception("Error reading eb assignment file.")
+            line_split_strings = line.split("\t")
+            # format checking
+            assert(line_split_strings[0] == "{}:".format(ieb))
+            assert("sum_of_avgsize" in line_split_strings[-1])
+            eb_assignment[ieb] = line_split_strings[1:-1]
+    return eb_assignment
 
 def commandline():
     parser = argparse.ArgumentParser(prog='Plotter.')
@@ -356,7 +396,7 @@ def commandline():
     parser.add_argument('--only-event-length', action='store_true', help='In the buffer distribution plot, keep only the line that shows the distribution of event length.')
     parser.add_argument('--no-cumulative', action='store_true', help='Remove the line that shows the cumulative plot of buffer peak distribution.')
     parser.add_argument('--total-only', action='store_true', help='Plot only the plot for the sum of buffering between all fifos.')
-    parser.add_argument('--log-average-event-size', action='store_true', help='generate a log file containing average event size for each chip')
+    #parser.add_argument('--log-average-event-size', action='store_true', help='generate a log file containing average event size for each chip')
     parser.add_argument('--tag', type=str, default="", help='Add a tag to be appeneded to the output dir name')
     parser.add_argument('--compare', type=str, default="", help='Compare to a different version, use the path that include the output plots. Comparison is done in buffer distribution plot only.')
     args = parser.parse_args()
@@ -371,15 +411,13 @@ def main():
     outdir = "{}".format(args.inpath.split("/")[-1])
     if not os.path.exists(outdir):
         os.makedirs(outdir)
-    plot_nchips_per_eb(args.inpath, outdir)
+    eb_assignment = get_eb_assignment(args.inpath, outdir)
     cache_file_name = "{}/data.pkl".format(outdir)
     data = load_data(args.inpath, cache_file_name, args.force_reload)
     if args.no_event_length and args.only_event_length:
         raise ValueError
-    if args.log_average_event_size:
-        log_average_event_size(data, outdir)
-        return
-    plot_buffer_distribution(data, outdir, args)
+    log_average_event_size(data, outdir)
+    plot_buffer_distribution(data, outdir, args, eb_assignment)
     return
 
 if __name__ == "__main__":
