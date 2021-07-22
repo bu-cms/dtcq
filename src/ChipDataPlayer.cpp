@@ -2,7 +2,8 @@
 
 using namespace std;
 
-ChipDataPlayer::ChipDataPlayer(vector<string> file_name_list, int _nchips, vector<float> elink_chip_ratio, bool is_random_l1, bool use_trigger_rule) : Component(), out_read(_nchips), out_data(_nchips), nevents(_nchips, 0), RANDOM_L1(is_random_l1), TRIGGER_RULE(use_trigger_rule) {
+ChipDataPlayer::ChipDataPlayer(vector<string> file_name_list, int _nchips, vector<float> elink_chip_ratio, bool is_random_l1, bool use_trigger_rule) : Component(), out_read(_nchips), out_data(_nchips), nevents(_nchips, 0), RANDOM_L1(is_random_l1), TRIGGER_RULE(use_trigger_rule),
+buffer_for_first_word_in_stream(_nchips,0ull) {
     assert(_nchips == file_name_list.size());
     assert(_nchips == elink_chip_ratio.size());
     nchips = _nchips;
@@ -74,16 +75,16 @@ void ChipDataPlayer::tick() {
             input_streams[ichip]->seekg(0);
         }
         if ( (!input_streams[ichip]->eof()) && (nticks%ticks_per_word[ichip]==0) && trigger_condition) {
-            if (buffer_for_first_word_in_stream>0) {
-                value = buffer_for_first_word_in_stream;
-                buffer_for_first_word_in_stream = 0;
+            if (buffer_for_first_word_in_stream[ichip]>0) {
+                value = buffer_for_first_word_in_stream[ichip];
+                buffer_for_first_word_in_stream[ichip] = 0;
             }
             else {
-                value = 0;
+                value = 0ull;
                 input_streams[ichip]->read( reinterpret_cast<char*>(&value), sizeof(value) ) ;
-                if(value & (((uint64_t)1)<<63)) {
+                if(value & (1ull<<63)) {
                     nevents[ichip]++;
-                    if (nevents[ichip] > triggered_events) buffer_for_first_word_in_stream = value;
+                    if (nevents[ichip] > triggered_events) buffer_for_first_word_in_stream[ichip] = value;
                 }
                 //bitset<64> b_value(value);
                 //std::cout<<"Event player chip "<<ichip<<" data = "<<b_value<<std::endl;
@@ -96,7 +97,7 @@ void ChipDataPlayer::tick() {
             }
         }
         out_read[ichip].set_value(false);
-        out_data[ichip].set_value(0);
+        out_data[ichip].set_value(0ull);
     }
     nticks ++;
 }
