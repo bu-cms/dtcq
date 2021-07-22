@@ -32,6 +32,7 @@ int main(int argc, char* argv[]) {
     // Default parameters
     bool DEBUG=false;
     bool RANDOM_L1=true;
+    bool DRY_RUN=false;
     bool TRIGGER_RULE=true;
     int OUTPUT_LINKS=12;
     std::string input_dirname("input_dtc11_10kevt");
@@ -43,6 +44,7 @@ int main(int argc, char* argv[]) {
     std::string help_msg("Usage: ./build/dtc [options]\n\
             --help:                         display this message.\n\
             --debug:                        enable some debug output.\n\
+            --dry-run:                      print out event builder assignment without actually running the simulation.\n\
             --input/-i INPUT_DIRNAME:       Change the input directory name, by default uses input_10k.\n\
             --config/-c CONFIG_FILENAME:    Config file that include n-elinks and n-events-compression per chip, by default uses config/default.config.\n\
             --nevents/-n N_Events:          Number of events to run before the end of simulation. Default value = 1000.\n\
@@ -96,6 +98,10 @@ int main(int argc, char* argv[]) {
         }
         if (std::string(argv[iarg])=="--no-trigger-rule") {
             TRIGGER_RULE = false;
+            continue;
+        }
+        if (std::string(argv[iarg])=="--dry-run") {
+            DRY_RUN = true;
             continue;
         }
         if (std::string(argv[iarg])=="--output-links") {
@@ -164,6 +170,7 @@ int main(int argc, char* argv[]) {
     // convert filenames to vector of basename (keys used in chip config mapping)
     std::vector<std::string> chip_basename_list(nchips);
     std::transform(dtc_binary_fn_list.begin(), dtc_binary_fn_list.end(), chip_basename_list.begin(), ChipConfigReader::filename_to_basename);
+
     // assign the chips to the event builders
     std::vector<int> eb_assignment = config.assign_chips_to_event_builders(chip_basename_list, OUTPUT_LINKS);
     std::vector<int> nchips_per_eb(OUTPUT_LINKS, 0);
@@ -173,6 +180,31 @@ int main(int argc, char* argv[]) {
         ichip_to_ichip_per_eb[ichip] = nchips_per_eb[ieb];
         nchips_per_eb[ieb]++;
     }
+    // save the eb assignment somewhere
+    std::ofstream log_eb_assignment(output_dir+"/eb_assignment.txt");
+    std::cout<<"nchips in each eb:"<<std::endl;
+    for (auto nchips_in_each_eb : nchips_per_eb) {
+        log_eb_assignment<<nchips_in_each_eb<<"\t";
+        std::cout        <<nchips_in_each_eb<<"\t";
+    }
+    log_eb_assignment<<std::endl;
+    std::cout        <<std::endl;
+    for (int ieb=0; ieb<OUTPUT_LINKS; ieb++) {
+        log_eb_assignment<<ieb<<":\t";
+        std::cout        <<ieb<<":\t";
+        float sum_of_avgsize = 0;
+        for (int ichip=0; ichip<nchips; ichip++) {
+            if (ieb==eb_assignment[ichip]) {
+                log_eb_assignment<<chip_basename_list[ichip]<<"\t";
+                std::cout        <<chip_basename_list[ichip]<<"\t";
+                sum_of_avgsize+=config.GetAvgSize(chip_basename_list[ichip]);
+            }
+        }
+    log_eb_assignment<<"sum_of_avgsize="<<sum_of_avgsize<<std::endl;
+    std::cout        <<"sum_of_avgsize="<<sum_of_avgsize<<std::endl;
+    }
+    log_eb_assignment.close();
+
     // setup circuit and components
     auto circuit = std::make_shared<Circuit>();
     // read the elink to chip ratio and configure data player accordingly
@@ -219,6 +251,11 @@ int main(int argc, char* argv[]) {
         evt_builders[ieb]->out_read_data[ichip_per_eb].connect( &(fifos_output_data[ichip]->in_pop_enable) );
         evt_builders[ieb]->out_read_control[ichip_per_eb].connect( &(fifos_output_control[ichip]->in_pop_enable) );
     }
+    
+    if (DRY_RUN) {
+        return 0;
+    }
+
     int inactive_time = 0;
     unsigned long long i_tick = 0;
     std::vector<int> i_event_per_eb(evt_builders.size(),0);
