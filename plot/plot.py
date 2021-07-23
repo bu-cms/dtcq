@@ -72,8 +72,8 @@ def load_data(data_dir, cache_file_name="", force_reload=False):
     # A fine-binned histogram recording the distribution of event size, maximum=1000
     maxsize_perchip = 1000
     maxsize_total = int(nchips * maxsize_perchip / 2)
-    data["h_event_size_perchip"] = np.zeros(shape=(nchips, maxsize_perchip), dtype=int)
-    total_event_sizes = np.zeros(nevents, dtype=int)
+    data["h_event_size_perchip"] = np.zeros(shape=(nchips, maxsize_perchip), dtype=np.int32)
+    total_event_sizes = np.zeros(nevents, dtype=np.int32)
     print("Reading event length...")
     for ichip in tqdm(range(nchips)):
         ievent = 0
@@ -102,7 +102,7 @@ def load_data(data_dir, cache_file_name="", force_reload=False):
                 data["h_event_size_perchip"][ichip][len_counting]+=1
                 total_event_sizes[ievent] += len_counting
     # histogramize the totals
-    data["h_event_size_total"] = np.zeros(np.max(total_event_sizes)+1, dtype=int)
+    data["h_event_size_total"] = np.zeros(np.max(total_event_sizes)+1, dtype=np.int32)
     for event_size in total_event_sizes:
         data["h_event_size_total"][event_size] += 1
 
@@ -110,31 +110,36 @@ def load_data(data_dir, cache_file_name="", force_reload=False):
     # store in histogram
     maxsize_perchip = 10000
     maxsize_total = int(nchips * maxsize_perchip / 2)
-    data["h_buffer_size_perchip"] = np.zeros(shape=(nchips, maxsize_perchip),dtype=int)
-    data["h_buffer_size_total"] = np.zeros(maxsize_total,dtype=int)
-    input_fn = "{}/output_fifo_data_sizes.txt".format(data_dir)
+    data["h_buffer_size_perchip"] = np.zeros(shape=(nchips, maxsize_perchip),dtype=np.int32)
+    data["h_buffer_size_total"] = np.zeros(maxsize_total,dtype=np.int32)
+    # Check the size of input files
+    nticks = -1
+    input_fns = ["{}/output_fifo_data_{}.bin".format(data_dir, data["chip"][ichip].basename) for ichip in range(nchips)]
+    size_per_file = [os.stat(input_fn).st_size for input_fn in input_fns]
+    if max(size_per_file) > min(size_per_file):
+        print("Warning: input files don't have the same size.")
+    nticks = int(min(size_per_file)/4)
+    print("recognize number of ticks = {}".format(nticks))
     print("reading buffer occupancies...")
-    with open(input_fn) as f:
-        nlines = count_lines_in_file(f)
-    with open(input_fn) as f:
-        pbar = tqdm(total=nlines)
-        for line in f:
-            pbar.update(1)
-            numbers = line.replace("\n","").split(",")
-            assert(nchips == len(numbers))
-            total_buffer = 0
-            for ichip in range(nchips):
-                buffer_ichip = int(numbers[ichip])
-                total_buffer += buffer_ichip
-                while buffer_ichip >= len(data["h_buffer_size_perchip"][ichip]):
-                    # double the size of array if not enough
-                    data["h_buffer_size_perchip"] = np.concatenate((data["h_buffer_size_perchip"], np.zeros_like(data["h_buffer_size_perchip"])), axis=1)
-                data["h_buffer_size_perchip"][ichip][buffer_ichip]+=1
-            while total_buffer >= len(data["h_buffer_size_total"]):
-                # double the size of array if not enough
-                data["h_buffer_size_total"] = np.concatenate((data["h_buffer_size_total"], np.zeros_like(data["h_buffer_size_total"])), axis=0)
-            data["h_buffer_size_total"][total_buffer] += 1
-        pbar.close()
+    # read input files in blocks for memory efficiency
+    max_block_size = 1024*1024 # in ticks
+    processed_ticks = 0
+    pbar = tqdm(total=nticks*nchips)
+    # Open input files for reading
+    opened_fs = [open(input_fn,"rb") for input_fn in input_fns]
+    while processed_ticks < nticks:
+        block_size = min(max_block_size, nticks - processed_ticks)
+        total_buffer_evolution_per_block = np.zeros(block_size, dtype=np.int32)
+        for ichip in range(nchips):
+            ichip_buffer_evolution_per_block = np.fromfile(input_fns[ichip], dtype=np.int32, count=block_size, offset=processed_ticks)
+            total_buffer_evolution_per_block += ichip_buffer_evolution_per_block
+            ichip_buffer_histogram_per_block = np.histogram(ichip_buffer_evolution_per_block, bins=maxsize_perchip, range=(0, maxsize_perchip))[0]
+            data["h_buffer_size_perchip"][ichip] += ichip_buffer_histogram_per_block
+            pbar.update(block_size)
+        total_buffer_histogram_per_block = np.histogram(total_buffer_evolution_per_block, bins=maxsize_total, range=(0, maxsize_total))[0]
+        data["h_buffer_size_total"] += total_buffer_histogram_per_block
+        processed_ticks += block_size
+    pbar.close()
 
     # Save data into cache file
     if cache_file_name:

@@ -260,8 +260,13 @@ int main(int argc, char* argv[]) {
     unsigned long long i_tick = 0;
     std::vector<int> i_event_per_eb(evt_builders.size(),0);
     int i_event = 0; //technically going to be the min value in i_event_per_eb
-    std::ofstream outputsize_output_fifo_data(output_dir+"/output_fifo_data_sizes.txt");
-    if (!outputsize_output_fifo_data) {std::cerr<<"Unable to write to "<<output_dir+"/output_fifo_data_sizes.txt"<<std::endl; return 4;}
+    std::vector<std::ofstream> ofstreamvector_output_fifo_data;
+    for (int ichip=0; ichip<nchips; ichip++) {
+        string chip_basename = chip_basename_list[ichip];
+        string ichip_output_fname = output_dir+"/output_fifo_data_"+chip_basename+".bin";
+        ofstreamvector_output_fifo_data.emplace_back(std::ofstream{ichip_output_fname, std::ios::binary});
+        if (!ofstreamvector_output_fifo_data[ichip]) {std::cerr<<"Unable to write to "<<ichip_output_fname<<std::endl; return 4;}
+    }
     std::cout<<"auto-ticking..."<<std::endl;
     while (true)
     {
@@ -330,10 +335,9 @@ int main(int argc, char* argv[]) {
         //std::cout<<"tick="<<i_tick<<std::endl;
         circuit->tick();
         for (int ichip=0; ichip<nchips; ichip++) {
-            if (ichip>0) {outputsize_output_fifo_data<<",";}
-            outputsize_output_fifo_data<<to_string(fifos_output_data[ichip]->d_get_buffer_size());
+            int value = fifos_output_data[ichip]->d_get_buffer_size();
+            ofstreamvector_output_fifo_data[ichip].write(reinterpret_cast<const char*>(&value), sizeof(value) );
         };
-        outputsize_output_fifo_data<<endl;
         for (int ieb=0; ieb<evt_builders.size(); ieb++) if (evt_builders[ieb]->out_event_ready.get_value()) {
             i_event_per_eb[ieb]++;
         }
