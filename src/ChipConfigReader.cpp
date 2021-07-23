@@ -66,7 +66,7 @@ vector<int> ChipConfigReader::assign_chips_to_event_builders(vector<string> chip
     int eb_iter = 0;
     float current_size_allocated = 0;
     std::cout<<"Assigning chips... Sum of event size="<<sum_of_size<<" threshold="<<size_threshold_per_eb<<std::endl;
-    std::cout<<"iEB\t|\tAllocated size\t|\tChip name"<<std::endl;
+    std::cout<<"iEB\t|\tchip size\t|\tcumulated size\t|\tchip name"<<std::endl;
     for (string basename : ordered_basenames) {
         for (int ichip=0; ichip<chip_basename_list.size(); ichip++) {
             if (assignment[ichip]>=0) continue;
@@ -74,7 +74,7 @@ vector<int> ChipConfigReader::assign_chips_to_event_builders(vector<string> chip
                 assert(eb_iter<n_event_builders);
                 assignment[ichip] = eb_iter;
                 current_size_allocated += chip_avg_size[ichip];
-                std::cout<<eb_iter<<"\t|\t"<<current_size_allocated<<"\t|\t"<<basename<<std::endl;
+                std::cout<<eb_iter<<"\t|\t"<<chip_avg_size[ichip]<<"\t\t|\t"<<current_size_allocated<<"\t\t|\t"<<basename<<std::endl;
                 if (current_size_allocated > (eb_iter+1) * size_threshold_per_eb) {
                     eb_iter++;
                 }
