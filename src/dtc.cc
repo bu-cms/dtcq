@@ -131,13 +131,13 @@ int main(int argc, char* argv[]) {
     }
 
     // print out parameters and setup the output dir
-    std::string output_dir("output_");
+    std::string output_dir("output/");
     std::size_t pos = 0; 
-    if (input_dirname.find("input_") != std::string::npos) {
-        pos = input_dirname.find("input_")+6; 
+    while(input_dirname.back()=='/') input_dirname.pop_back();
+    if (input_dirname.find("/") != std::string::npos) {
+        pos = input_dirname.find("/")+1; 
     }
     std::string input_tag = input_dirname.substr(pos);
-    while(input_tag.back()=='/') input_tag.pop_back();
     output_dir+=input_tag+tag;
     if (RANDOM_L1) output_dir+="_randomL1"; else output_dir+="_constL1";
     if (RANDOM_L1 && !TRIGGER_RULE)  output_dir+="NoTriggerRule";
@@ -186,6 +186,7 @@ int main(int argc, char* argv[]) {
     for (auto nchips_in_each_eb : nchips_per_eb) {
         log_eb_assignment<<nchips_in_each_eb<<"\t";
         std::cout        <<nchips_in_each_eb<<"\t";
+        assert(nchips_in_each_eb>0);
     }
     log_eb_assignment<<std::endl;
     std::cout        <<std::endl;
@@ -209,7 +210,9 @@ int main(int argc, char* argv[]) {
     auto circuit = std::make_shared<Circuit>();
     // read the elink to chip ratio and configure data player accordingly
     std::vector<float> elink_chip_ratio = config.GetNELinkVector(chip_basename_list); // n-elinks/n-chips for each chip
+    if (DEBUG) std::cout<<"Creating player object"<<std::endl;
     auto player  = std::make_shared<ChipDataPlayer>(dtc_binary_fn_list, nchips, elink_chip_ratio, RANDOM_L1, TRIGGER_RULE); // there are 60 modules in dtc
+    if (DEBUG) std::cout<<"Created player object"<<std::endl;
     circuit->add_component(player);
     std::vector<std::shared_ptr<DTCEventBuilder>> evt_builders;
     for (int ieb=0; ieb<OUTPUT_LINKS; ieb++) {
