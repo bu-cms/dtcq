@@ -73,7 +73,7 @@ def read_data_from_config(config_file_name):
     return data
 
 def load_data_from_tree(tree, config_file_name, NE=1):
-    tree_array = tree.arrays(["barrel", "disk", "layer", "dtc", "module_id", "module_index", "stream_size_chip_aurora", "stream_size_chip_aurora_pad"])
+    tree_array = tree.arrays(["barrel", "disk", "layer", "dtc", "module_id", "module_index", "stream_size_chip_aurora", "raw_hits"])
     data = []
     with open(config_file_name) as config:
         for line in config:
@@ -86,11 +86,15 @@ def load_data_from_tree(tree, config_file_name, NE=1):
             (dtc_id, is_barrel, layer, disk, module_id, chip_id) = module_cmssw_params
             layout = module_to_layout(module_cmssw_params)
             raw_chip_data = tree_array[b"stream_size_chip_aurora"]
+            raw_hits = tree_array[b"raw_hits"]
             # select the unpadded data for module and chip
             selector = (tree_array[b"dtc"]==dtc_id) & (tree_array[b"barrel"]==is_barrel) & (tree_array[b"layer"]==layer) & (tree_array[b"module_id"]==module_id) & (tree_array[b"disk"]==disk)
             raw_chip_data = raw_chip_data[selector][:,chip_id]
+            raw_hits = raw_hits[selector][:,chip_id].flatten()
+            raw_hits_mean = np.mean(raw_hits)
+            raw_hits_std = np.std(raw_hits)
             assert len(set(tree_array[b"module_index"][selector]))==1 # make sure we are selecting one module
-            relative_std = (np.std(raw_chip_data)/np.mean(raw_chip_data))
+            raw_size_std = np.std(raw_chip_data)
             # concatenate adjacent NE events
             nevents = len(raw_chip_data) - (len(raw_chip_data)%NE)
             raw_chip_data = np.reshape(raw_chip_data[:nevents], (-1, NE))
@@ -98,6 +102,7 @@ def load_data_from_tree(tree, config_file_name, NE=1):
             padding = 64 - raw_chip_data%64
             padding[padding<6] += 64 # need to identify end of event by at least 6 continuous zeroes
             pad_chip_data = raw_chip_data + padding
+            pad_data_std = np.std(raw_chip_data)/np.square(NE) # scale the std to event level (rather than every NE events)
             raw_evtsize = np.sum(raw_chip_data)/nevents
             pad_evtsize = np.sum(pad_chip_data)/nevents
             raw_occupancy = raw_evtsize * 0.75 / (1.28 * elinks * 1000)
@@ -106,9 +111,12 @@ def load_data_from_tree(tree, config_file_name, NE=1):
                 "basename" : basename,
                 "layout": layout,
                 "share" : elinks,
-                "relative_std" : relative_std,
-                "size" : raw_evtsize,
-                "padded_size" : pad_evtsize,
+                "raw_hits" : raw_hits_mean,
+                "raw_hits_std" : raw_hits_std,
+                "raw_size" : raw_evtsize,
+                "raw_size_std" : raw_size_std,
+                "pad_size" : pad_evtsize,
+                "pad_size_std" : pad_data_std,
                 "occupancy" : 100*raw_occupancy,
                 "padded_occupancy" : 100*pad_occupancy,
                 })
@@ -141,9 +149,12 @@ def sort_data_to_elinks(data):
                         "basename" : basename_no_chip + "elink{}".format(elink_ID),
                         "layout" : chip_entry["layout"],
                         "share" : 1,
-                        "relative_std" : chip_entry["relative_std"]*np.sqrt(nelinks),
-                        "size" : chip_entry["size"]/nelinks,
-                        "padded_size" : chip_entry["padded_size"]/nelinks,
+                        "raw_hits" : chip_entry["raw_hits"]/nelinks,
+                        "raw_hits_std" : chip_entry["raw_hits_std"]/nelinks,
+                        "raw_size" : chip_entry["raw_size"]/nelinks,
+                        "raw_size_std" : chip_entry["raw_size_std"]/(nelinks),
+                        "pad_size" : chip_entry["pad_size"]/nelinks,
+                        "pad_size_std" : chip_entry["pad_size_std"]/(nelinks),
                         "occupancy" : chip_entry["occupancy"],
                         "padded_occupancy" : chip_entry["padded_occupancy"],
                         }
@@ -162,19 +173,25 @@ def sort_data_to_elinks(data):
                         "basename" : basename_no_chip + "elink{}".format(elink_ID),
                         "layout" : chip_entry["layout"],
                         "share" : elink_share,
-                        "relative_std" : chip_entry["relative_std"]*elink_share*np.sqrt(elink_share),
-                        "size" : chip_entry["size"],
-                        "padded_size" : chip_entry["padded_size"],
+                        "raw_hits" : chip_entry["raw_hits"],
+                        "raw_hits_std" : chip_entry["raw_hits_std"]*np.sqrt(elink_share),
+                        "raw_size" : chip_entry["raw_size"],
+                        "raw_size_std" : chip_entry["raw_size_std"]*np.sqrt(elink_share),
+                        "pad_size" : chip_entry["pad_size"],
+                        "pad_size_std" : chip_entry["pad_size_std"]*np.sqrt(elink_share),
                         "occupancy" : chip_entry["occupancy"]*elink_share,
                         "padded_occupancy" : chip_entry["padded_occupancy"]*elink_share,
                         }
                 unmerged[elink_basename] = elink_entry
             else:
                 unmerged[elink_basename]["share"] += elink_share
-                unmerged[elink_basename]["relative_std"] += chip_entry["relative_std"]*elink_share*np.sqrt(elink_share),
-                unmerged[elink_basename]["size"] += chip_entry["size"]
+                unmerged[elink_basename]["raw_hits"] += chip_entry["raw_hits"],
+                unmerged[elink_basename]["raw_hits_std"] += chip_entry["raw_hits"]*np.sqrt(elink_share),
+                unmerged[elink_basename]["raw_size"] += chip_entry["raw_size"]
+                unmerged[elink_basename]["raw_size_std"] += chip_entry["raw_size_std"]*np.sqrt(elink_share),
                 unmerged[elink_basename]["occupancy"] += chip_entry["occupancy"]*elink_share
-                unmerged[elink_basename]["padded_size"] += chip_entry["padded_size"]
+                unmerged[elink_basename]["pad_size"] += chip_entry["pad_size"]
+                unmerged[elink_basename]["pad_size_std"] += chip_entry["pad_size_std"]*np.sqrt(elink_share),
                 unmerged[elink_basename]["padded_occupancy"] += chip_entry["padded_occupancy"]*elink_share
             # check if ready to merge
             if abs(unmerged[elink_basename]["share"]-1)<0.1:
@@ -226,19 +243,36 @@ def are_consistent_layout(layout_1, layout_2):
     ret = ret and (layout_1[2]<0 or layout_2[2]<0 or layout_1[2]==layout_2[2])
     return ret
 
+def add_lumi(data_in):
+    for entry in data_in:
+        if entry["layout"][0] == "TEPX" and entry["layout"][2]==1:
+            for key in entry.keys():
+                if "occupancy" in key:
+                    print(f"{key} : {entry[key]}")
+                    entry[key] = entry[key]*1.1
+                    print(f"{key} : {entry[key]}")
+    return data_in
+
 def organize_data(data_in, distribution):
+    def get_distribution(arr, dist):
+        if "_relative_std" in dist:
+            numerator = distribution.replace("_relative", "")
+            denominator = distribution.replace("_relative_std", "")
+            return arr[numerator]/arr[denominator]
+        else:
+            return arr[dist]
     data_out = {
-            "all" : np.array([i[distribution] for i in data_in]),
+            "all" : np.array([get_distribution(i, distribution) for i in data_in]),
             }
     # group by dtc
     for dtc in dtc_names:
-        data_out[dtc] = np.array([i[distribution] for i in data_in if dtc in i["basename"]])
+        data_out[dtc] = np.array([get_distribution(i, distribution) for i in data_in if dtc in i["basename"]])
     # group by detector sections
     for section_name,layout in detector_sections.items():
-        data_out[section_name] = np.array([i[distribution] for i in data_in if are_consistent_layout(layout, i["layout"])])
+        data_out[section_name] = np.array([get_distribution(i, distribution) for i in data_in if are_consistent_layout(layout, i["layout"])])
     return data_out
 
-def plot_distribution(data, distribution, labels=["all"], stack=True, config_tag="default", plot_tag="all", ylabel=None, ne=1, nopad=False):
+def plot_distribution(data, distribution, labels=["all"], stack=True, config_tag="default", version_tag="default", plot_tag="all", ylabel=None, ne=1, nopad=False):
     fig,ax = plt.subplots(1,1)
     print("Plotting: distribution={}, labels={}, stack={}".format(distribution, labels, stack))
     x = [data[label] for label in labels]
@@ -252,16 +286,25 @@ def plot_distribution(data, distribution, labels=["all"], stack=True, config_tag
         ax.set_ylabel(ylabel)
     else:
         ax.set_ylabel("distribution")
-    if "occupancy" in distribution:
+    if "relative_std" in distribution:
+        ax.set_xlabel("relative std")
+    elif "occupancy" in distribution:
         ax.set_xlabel("e-link occupancy (%)")
         ax.axvline(x=75, color="orange", lw=5, ls="--")
         ax.axvline(x=100, color="red",   lw=5, ls="--")
+        # temporary
+        #ax.set_xlim(40,110)
+        #ax.set_ylim(0,400)
     elif "size" in distribution:
         ax.set_xlabel("chip data size per event (bit)")
     elif distribution == "ratio":
         ax.set_xlabel("compression ratio")
+    elif distribution == "raw_hits":
+        ax.set_xlabel("pixel hits")
+    else:
+        ax.set_xlabel(distribution)
     ax.legend()
-    outdir = "plots/{}".format(config_tag)
+    outdir = "plots/{}/{}".format(config_tag, version_tag)
     if not os.path.exists(outdir):
         os.makedirs(outdir)
     if nopad:
@@ -286,6 +329,7 @@ def command_line():
     parser.add_argument("--stack", action="store_true", help="wether we stack the hists or not.")
     parser.add_argument("--bychip", action="store_true", help="each chip gets an entry, compared to each entry for an elink.")
     parser.add_argument("--nopad", action="store_true", help="do not apply padding, NE argument ignored.")
+    parser.add_argument("--lumi", action="store_true", help="add lumi trigger")
     parser.add_argument("--newload", action="store_true", help="don't use cache.")
     args = parser.parse_args()
     return args
@@ -293,8 +337,11 @@ def command_line():
 def main():
     args = command_line()
     config_name = args.config
+    config_tag = config_name.split("/")[-1]
+    config_tag = config_tag.split(".")[0]
     #data = read_data_from_config(config_name)
-    pkl_filename = args.ntuple.replace(".root", "_NE{}.pkl".format(args.ne))
+    pkl_filename = args.ntuple.replace(".root", "{}_NE{}.pkl".format(config_tag,args.ne))
+    version_tag = args.ntuple.split("/")[-2]
     data = None
     if os.path.exists(pkl_filename) and not args.newload:
         with open(pkl_filename, "rb") as f:
@@ -309,33 +356,37 @@ def main():
             pkl.dump(data, f)
     if args.bychip:
         ylabel = "N(chips)"
-    elif args.distribution=="occupancy" or args.distribution=="relative_std":
-        data = sort_data_to_elinks(data)
-        ylabel = "N(elinks)"
     else:
-        ylabel = "N(chips)"
-    if not args.nopad and args.distribution in ["occupancy", "size"]:
+        data = sort_data_to_elinks(data)
+        pkl_elink_filename = args.ntuple.replace(".root", "{}_elinks_NE{}.pkl".format(config_tag, args.ne))
+        with open(pkl_elink_filename,"wb") as f:
+            pkl.dump(data, f)
+        ylabel = "N(elinks)"
+    if not args.nopad and args.distribution in ["occupancy"]:
         args.distribution = "padded_"+args.distribution
+    if args.lumi:
+        data = add_lumi(data)
+        config_tag += "_lumi"
     data = organize_data(data,args.distribution)
-    config_tag = config_name.split("/")[-1]
-    config_tag = config_tag.split(".")[0]
+    if args.bychip:
+        config_tag += "_bychip"
     distribution = args.distribution
     # make the plots
     if args.area=="all":
-        plot_distribution(data, distribution, labels=["all"], stack=args.stack, config_tag=config_tag, plot_tag="all", ylabel=ylabel, ne=args.ne, nopad=args.nopad)
+        plot_distribution(data, distribution, labels=["all"], stack=args.stack, config_tag=config_tag, version_tag=version_tag, plot_tag="all", ylabel=ylabel, ne=args.ne, nopad=args.nopad)
     elif args.area=="bydtc":
-        plot_distribution(data, distribution, labels=dtc_names, stack=args.stack, config_tag=config_tag, plot_tag="dtcs", ylabel=ylabel, ne=args.ne, nopad=args.nopad)
+        plot_distribution(data, distribution, labels=dtc_names, stack=args.stack, config_tag=config_tag, version_tag=version_tag, plot_tag="dtcs", ylabel=ylabel, ne=args.ne, nopad=args.nopad)
         if args.individual:
             for dtc_name in dtc_names:
-                plot_distribution(data, distribution, labels=[dtc_name], stack=args.stack, config_tag=config_tag, plot_tag=dtc_name, ylabel=ylabel, ne=args.ne, nopad=args.nopad)
+                plot_distribution(data, distribution, labels=[dtc_name], stack=args.stack, config_tag=config_tag, version_tag=version_tag, plot_tag=dtc_name, ylabel=ylabel, ne=args.ne, nopad=args.nopad)
     elif args.area=="bysection":
-        plot_distribution(data, distribution, labels=list(detector_sections.keys()), stack=args.stack, config_tag=config_tag, plot_tag="sections", ylabel=ylabel, ne=args.ne, nopad=args.nopad)
+        plot_distribution(data, distribution, labels=list(detector_sections.keys()), stack=args.stack, config_tag=config_tag, version_tag=version_tag, plot_tag="sections", ylabel=ylabel, ne=args.ne, nopad=args.nopad)
         if args.individual:
             for section_name in detector_sections.keys():
-                plot_distribution(data, distribution, labels=[section_name], stack=args.stack, config_tag=config_tag, plot_tag=section_name.replace(" ", "_"), ylabel=ylabel, ne=args.ne, nopad=args.nopad)
+                plot_distribution(data, distribution, labels=[section_name], stack=args.stack, config_tag=config_tag, version_tag=version_tag, plot_tag=section_name.replace(" ", "_"), ylabel=ylabel, ne=args.ne, nopad=args.nopad)
     else:
         section_name = args.area.replace("_"," ")
-        plot_distribution(data, distribution, labels=[section_name], stack=args.stack, config_tag=config_tag, plot_tag=section_name.replace(" ", "_"), ylabel=ylabel, ne=args.ne, nopad=args.nopad)
+        plot_distribution(data, distribution, labels=[section_name], stack=args.stack, config_tag=config_tag, version_tag=version_tag, plot_tag=section_name.replace(" ", "_"), ylabel=ylabel, ne=args.ne, nopad=args.nopad)
 
     return 0
 
