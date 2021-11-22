@@ -4,6 +4,7 @@
 #include <include/Ports.h>
 #include <ctime>
 #include <deque>
+#include <regex>
 #include <algorithm>
 #include <iostream>
 #include <boost/filesystem.hpp>
@@ -20,11 +21,14 @@
 #include <interface/DTCEventBuilder.h>
 #include <interface/ChipConfigReader.h>
 #include "TFile.h"
-//#include "TTreeReader.h"
-//#include "TTreeReaderValue.h"
+#include "TDirectory.h"
+#include "TList.h"
+#include "TKey.h"
+#include "TTreeReader.h"
+#include "TTreeReaderValue.h"
 
 using namespace std;
-using namespace boost::filesystem;
+//using namespace boost::filesystem;
 
 typedef FIFO<uint64_t> FIFO64;
 typedef FIFO<uint16_t> FIFO16;
@@ -162,24 +166,76 @@ int main(int argc, char* argv[]) {
     output_dir+="_N";
     output_dir+=to_string(nevents);
     std::cout<<" Output dir="<<output_dir<<std::endl;
-    create_directories(output_dir);
+    boost::filesystem::create_directories("output");
+    boost::filesystem::create_directories(output_dir);
 
-    // get a list of input files related to dtc
+    // read the root file, get a list of event sizes for relavent chips
+    // save chip the ordered chip information into txt file
+    string root_file_name = (input_dirname + "/chiptrees.root");
+    TFile* input_root_file = TFile::Open(root_file_name.c_str());
+    TDirectory* dtcdir = (TDirectory*) input_root_file->Get(dtcname.c_str());
+    assert(dtcdir); //make sure this directory exists in root file
+    int nchips = dtcdir->GetNkeys();
+    assert(nchips>0);
+    std::vector<TTree*> vec_trees(nchips);
+    int itree = 0;
+    // get list of chip trees
+    for (const auto && key : *dtcdir->GetListOfKeys()) {
+        vec_trees[itree] = (TTree*) ((TKey*)key)->ReadObj();
+        itree++;
+    }
+    int input_events = vec_trees[0]->GetEntries();
+    // initialize the chip sizes as 2d vectors, rows=input_events, cols=nchips
+    std::vector<std::vector<unsigned short>> vec_event_chip_sizes(input_events, std::vector<unsigned short>(nchips));
+    std::vector<std::vector<unsigned short>> vec_event_chip_parse_time(input_events, std::vector<unsigned short>(nchips));
+    // be ready to write the order of chips into txt file
+    std::ofstream log_fn_list(output_dir+"/ordered_chips.txt");
+    std::cout<<"Reading root file for "<<dtcname<<" nchips="<<nchips<<std::endl;
+    for (int ichip=0; ichip<nchips; ichip++) {
+        TTreeReader chip_reader(vec_trees[ichip]);
+        TTreeReaderValue<int> branch_dtc(chip_reader, "dtc");
+        TTreeReaderValue<bool> branch_barrel(chip_reader, "barrel");
+        TTreeReaderValue<int> branch_layer(chip_reader, "barrel");
+        TTreeReaderValue<int> branch_disk(chip_reader, "barrel");
+        TTreeReaderValue<int> branch_module_id(chip_reader, "barrel");
+        TTreeReaderValue<int> branch_module_index(chip_reader, "barrel");
+        TTreeReaderValue<int> branch_size_pad(chip_reader, "stream_size_chip_aurora_pad");
+        TTreeReaderValue<int> branch_parse_time(chip_reader, "parsing_time");
+        int ievent = 0;
+        std::cout<<chip_reader.GetEntries()<<std::endl;
+        chip_reader.SetEntry(0);
+        while (chip_reader.Next()) {
+            assert(*branch_size_pad < 65536);
+            assert(*branch_parse_time < 65536);
+            vec_event_chip_sizes[ievent][ichip] = *branch_size_pad;
+            vec_event_chip_parse_time[ievent][ichip] = *branch_parse_time;
+            ievent += 1;
+        }
+        assert(ievent==input_events);
+        std::regex rgx("module([0-9]+)chip([0-9]+)");
+        std::smatch matches;
+        std::string treename = vec_trees[ichip]->GetName();
+        if (std::regex_search(treename, matches, rgx)) {
+            cout<<"number of matches="<<matches.size()<<endl;
+            cout<<"groups: ";
+            for (auto match : matches) cout<<match.str();
+            cout<<endl;
+        }
+    }
+    log_fn_list.close();
+    return 0;
+
+
     std::vector<std::string> dtc_binary_fn_list;
-    path input_dir(input_dirname);
-    for (auto iter_fn=directory_iterator(input_dir); iter_fn != directory_iterator(); iter_fn++) {
+    boost::filesystem::path input_dir(input_dirname);
+    for (auto iter_fn=boost::filesystem::directory_iterator(input_dir); iter_fn != boost::filesystem::directory_iterator(); iter_fn++) {
         if ( is_directory(iter_fn->path()) ) continue;
         string filename = iter_fn->path().string();
         if ( filename.find("dtc") == std::string::npos ) continue;
         dtc_binary_fn_list.push_back(filename);
     }
-    // write the order of input filenames into a log file, so that we know which ichip number maps to which physical chip
-    std::ofstream log_fn_list(output_dir+"/ordered_file_names.txt");
-    for (auto filename : dtc_binary_fn_list) log_fn_list<<filename<<std::endl;
-    log_fn_list.close();
 
     // read config
-    int nchips = dtc_binary_fn_list.size();
     std::cout<< "Number of chips mapped to DTC = " << nchips <<endl;
     ChipConfigReader config(config_filename);
     // convert filenames to vector of basename (keys used in chip config mapping)
