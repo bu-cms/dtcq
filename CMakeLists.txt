@@ -6,7 +6,7 @@ project(dtcq LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wl,--no-as-needed -ldl -lpthread -lboost_filesystem -g")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wl,--no-as-needed -ldl -lpthread -g")
 
 # list executables here to be compiled
 set(EXECUTABLES
@@ -17,7 +17,7 @@ set(EXECUTABLES
 	)
 
 # Find packages Boost, ROOT
-find_package(Boost REQUIRED COMPONENTS filesystem system)
+find_package(Boost 1.71.0 REQUIRED COMPONENTS filesystem system)
 find_package(ROOT CONFIG REQUIRED COMPONENTS RIO Core Tree TreePlayer)
 
 include(FetchContent)
@@ -41,5 +41,5 @@ file(GLOB srcs ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
 
 foreach( exe ${EXECUTABLES} )
     add_executable(${exe} ${CMAKE_CURRENT_SOURCE_DIR}/src/${exe}.cc ${srcs})
-    target_link_libraries(${exe} ROOT::Core ROOT::RIO ROOT::Tree Boost::filesystem)
+    target_link_libraries(${exe} ROOT::Core ROOT::RIO ROOT::Tree ROOT::TreePlayer Boost::filesystem)
 endforeach()
