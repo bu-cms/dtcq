@@ -19,6 +19,9 @@
 #include <interface/ChipDataPlayer.h>
 #include <interface/DTCEventBuilder.h>
 #include <interface/ChipConfigReader.h>
+#include "TFile.h"
+//#include "TTreeReader.h"
+//#include "TTreeReaderValue.h"
 
 using namespace std;
 using namespace boost::filesystem;
@@ -37,6 +40,7 @@ int main(int argc, char* argv[]) {
     int OUTPUT_LINKS=12;
     std::string input_dirname("input_dtc11_10kevt");
     std::string config_filename("config/default.config");
+    std::string dtcname("dtc");
     std::string tag("");
     int nevents=1000;
 
@@ -47,6 +51,7 @@ int main(int argc, char* argv[]) {
             --dry-run:                      print out event builder assignment without actually running the simulation.\n\
             --input/-i INPUT_DIRNAME:       Change the input directory name, by default uses input_10k.\n\
             --config/-c CONFIG_FILENAME:    Config file that include n-elinks and n-events-compression per chip, by default uses config/default.config.\n\
+            --dtc/-d DTC:                   DTC number to simulate. \n\
             --nevents/-n N_Events:          Number of events to run before the end of simulation. Default value = 1000.\n\
             --random-l1 L1-TYPE:            L1-TYPE is boolean, set whether L1 trigger rate random with average of 750kHZ or just constantly 750kHz.\n\
             --no-trigger-rule:              Only effective for the random L1 trigger mode, disables the trigger rules.\n\
@@ -71,6 +76,16 @@ int main(int argc, char* argv[]) {
             }
             else {
                 std::cerr<<"--config/-c option requires one argument."<<std::endl;
+                return 1;
+            }
+            continue;
+        }
+        if (std::string(argv[iarg])=="--dtc" || std::string(argv[iarg])=="-d") {
+            if (iarg+1 < argc) {
+                dtcname += argv[++iarg]; // result into dtcname="dtc15" for example
+            }
+            else {
+                std::cerr<<"--dtc/-d option requires one argument."<<std::endl;
                 return 1;
             }
             continue;
@@ -138,7 +153,7 @@ int main(int argc, char* argv[]) {
         pos = input_dirname.find("/")+1; 
     }
     std::string input_tag = input_dirname.substr(pos);
-    output_dir+=input_tag+tag;
+    output_dir+=input_tag+"_"+dtcname+tag;
     if (RANDOM_L1) output_dir+="_randomL1"; else output_dir+="_constL1";
     if (RANDOM_L1 && !TRIGGER_RULE)  output_dir+="NoTriggerRule";
     std::cout<<"Running Mode: Randome L1="<<RANDOM_L1<<" TRIGGER_RULE="<<TRIGGER_RULE<<" OUTPUT_LINKS="<<OUTPUT_LINKS;
