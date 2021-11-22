@@ -16,6 +16,10 @@ set(EXECUTABLES
 	dtc
 	)
 
+# Find packages Boost, ROOT
+find_package(Boost REQUIRED COMPONENTS filesystem system)
+find_package(ROOT CONFIG REQUIRED COMPONENTS RIO Core Tree TreePlayer)
+
 include(FetchContent)
 FetchContent_Declare(
 	googletest
@@ -37,5 +41,5 @@ file(GLOB srcs ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
 
 foreach( exe ${EXECUTABLES} )
     add_executable(${exe} ${CMAKE_CURRENT_SOURCE_DIR}/src/${exe}.cc ${srcs})
-    target_link_libraries(${exe})
+    target_link_libraries(${exe} ROOT::Core ROOT::RIO ROOT::Tree Boost::filesystem)
 endforeach()
