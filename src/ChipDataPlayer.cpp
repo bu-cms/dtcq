@@ -2,9 +2,14 @@
 
 using namespace std;
 
-ChipDataPlayer::ChipDataPlayer(vector<string> file_name_list, int _nchips, vector<float> elink_chip_ratio, bool is_random_l1, bool use_trigger_rule) : Component(), out_read(_nchips), out_data(_nchips), nevents(_nchips, 0), RANDOM_L1(is_random_l1), TRIGGER_RULE(use_trigger_rule),
-buffer_for_first_word_in_stream(_nchips,0ull) {
-    assert(_nchips == file_name_list.size());
+ChipDataPlayer::ChipDataPlayer(vector<vector<unsigned short>> _vec_event_chip_sizes, int _nchips, vector<float> elink_chip_ratio, bool is_random_l1, bool use_trigger_rule) : 
+    Component(), out_read(_nchips), out_data(_nchips),
+    RANDOM_L1(is_random_l1), TRIGGER_RULE(use_trigger_rule),
+    max_event_idx(_vec_event_chip_sizes.size()), new_event_flag(_nchips, true),
+    vec_event_chip_sizes(_vec_event_chip_sizes),
+    remaining_words_for_triggered_events(_nchips)
+    {
+    assert(_nchips == vec_event_chip_sizes[0].size());
     assert(_nchips == elink_chip_ratio.size());
     nchips = _nchips;
     for (int ichip=0; ichip<nchips; ichip++) {
@@ -12,17 +17,16 @@ buffer_for_first_word_in_stream(_nchips,0ull) {
         add_output( &(out_data[ichip]) );
         assert( elink_chip_ratio[ichip]>0 );
         ticks_per_word.push_back( int(1.0*ticks_per_word_per_elink/elink_chip_ratio[ichip]) );
-        std::ifstream* new_stream = new std::ifstream(file_name_list[ichip].c_str(), std::ios::binary);
-        if (!bool(*new_stream)) throw std::invalid_argument((string("Unable to open file ")+file_name_list[ichip]).c_str());
-        input_streams.push_back( new_stream );
     }
     // edit bunch_not_empty according to LHC filling scheme
     bool* position_in_orbit = bunch_not_empty;
+    int non_empty_bunches = 0;
     for (int i=0;i<3;i++){
         for (int j=0; j<2; j++) {
             for (int k=0; k<3; k++) {
                 std::fill(position_in_orbit, position_in_orbit+72, true);
                 position_in_orbit+=72;
+                non_empty_bunches+=72;
                 position_in_orbit+=8;
             }
             position_in_orbit+=30;
@@ -30,6 +34,7 @@ buffer_for_first_word_in_stream(_nchips,0ull) {
         for (int k=0; k<4; k++) {
             std::fill(position_in_orbit, position_in_orbit+72, true);
             position_in_orbit+=72;
+            non_empty_bunches+=72;
             position_in_orbit+=8;
         }
         position_in_orbit+=31;
@@ -38,12 +43,15 @@ buffer_for_first_word_in_stream(_nchips,0ull) {
         for (int k=0; k<3; k++) {
             std::fill(position_in_orbit, position_in_orbit+72, true);
             position_in_orbit+=72;
+            non_empty_bunches+=72;
             position_in_orbit+=8;
         }
         position_in_orbit+=30;
     }
     position_in_orbit+=81;
     assert( position_in_orbit - bunch_not_empty == bunches_per_orbit );
+    // rescale the ticks per event to make final trigger rate being 750kHz
+    ticks_per_event = 400*1000*non_empty_bunches/bunches_per_orbit/trigger_rate;
 };
 
 void ChipDataPlayer::tick() {
@@ -54,47 +62,52 @@ void ChipDataPlayer::tick() {
             assert(nbunch<bunches_per_orbit);
             for (int i=0; i<time_since_recent_L1As.size(); i++) time_since_recent_L1As[i]++;
             if (time_since_recent_L1As.size()>0 && time_since_recent_L1As.front()>trigger_rule_bunch_period) time_since_recent_L1As.pop_front();
-            int new_rand = rand();
             // first event always trigger, otherwise depends on the toss and trigger rule
-            if ((time_since_recent_L1As.size()<trigger_rule_max_L1As && bunch_not_empty[nbunch] && rand()%int(min_ticks_per_event/10)==0) || (nticks==0)) {
-                triggered_events ++;
-                if (TRIGGER_RULE) time_since_recent_L1As.push_back(0);
+            //if ((time_since_recent_L1As.size()<trigger_rule_max_L1As && bunch_not_empty[nbunch] && rand()%int(ticks_per_event/10)==0) || (nticks==0)) {
+            if ((bunch_not_empty[nbunch] && rand()%int(ticks_per_event/10)==0) || (nticks==0)) {
+                potential_trigger_counts += 1;
+                if (time_since_recent_L1As.size()>=trigger_rule_max_L1As) {
+                    blocked_trigger_counts += 1;
+                    cout<<"Blocked trigger according to trigger rule, current ratio = "<<blocked_trigger_counts/potential_trigger_counts<<endl;
+                }
+                else {
+                    triggered_events++;
+                    int triggered_event_idx = rand() % max_event_idx;
+                    // load the event size per chip for this event idx
+                    for (int ichip=0; ichip<nchips; ichip++) {
+                        remaining_words_for_triggered_events[ichip].push_back(
+                                vec_event_chip_sizes[triggered_event_idx][ichip]/64 + (vec_event_chip_sizes[triggered_event_idx][ichip] % 64 != 0)
+                                );
+                    }
+                    if (TRIGGER_RULE) time_since_recent_L1As.push_back(0);
+                }
             }
             nbunch ++;
             if (nbunch == bunches_per_orbit) nbunch = 0;
         }
     }
+    else {
+        throw std::runtime_error("Flat trigger rate unimplemented.");
+    }
     for (int ichip=0; ichip<nchips; ichip++) {
         // Condition to read a new word: 1. File not at EOF; 2. matches ticks_per_word to be consistent with e-link speed 3. Does not exceed trigger rate
-        bool trigger_condition = false;
-        if (RANDOM_L1)  trigger_condition = (triggered_events >= nevents[ichip]);
-        else trigger_condition = ( (min_ticks_per_event+nticks)/(1+nevents[ichip]) >= min_ticks_per_event );
-        // start over if at the end of input file
-        if ( input_streams[ichip]->eof() ) {
-            input_streams[ichip]->clear();
-            input_streams[ichip]->seekg(0);
-        }
-        if ( (!input_streams[ichip]->eof()) && (nticks%ticks_per_word[ichip]==0) && trigger_condition) {
-            if (buffer_for_first_word_in_stream[ichip]>0) {
-                value = buffer_for_first_word_in_stream[ichip];
-                buffer_for_first_word_in_stream[ichip] = 0;
+        bool trigger_condition = (remaining_words_for_triggered_events[ichip].size()>0);
+        if ( (nticks%ticks_per_word[ichip]==0) && trigger_condition) {
+            if (new_event_flag[ichip]) {
+                value = 1ull<<63;
+                new_event_flag[ichip]=false;
             }
             else {
                 value = 0ull;
-                input_streams[ichip]->read( reinterpret_cast<char*>(&value), sizeof(value) ) ;
-                if(value & (1ull<<63)) {
-                    nevents[ichip]++;
-                    if (nevents[ichip] > triggered_events) buffer_for_first_word_in_stream[ichip] = value;
-                }
-                //bitset<64> b_value(value);
-                //std::cout<<"Event player chip "<<ichip<<" data = "<<b_value<<std::endl;
-                //std::cout<<"Event player chip "<<ichip<<" input file get single character = "<<input_streams[ichip]->get()<<std::endl;
             }
-            if (triggered_events >= nevents[ichip]) {
-                out_read[ichip].set_value(true);
-                out_data[ichip].set_value(value);
-                continue;
+            remaining_words_for_triggered_events[ichip][0] -= 1;
+            if (remaining_words_for_triggered_events[ichip][0]<=0) {
+                remaining_words_for_triggered_events[ichip].pop_front();
+                new_event_flag[ichip]=true;
             }
+            out_read[ichip].set_value(true);
+            out_data[ichip].set_value(value);
+            continue;
         }
         out_read[ichip].set_value(false);
         out_data[ichip].set_value(0ull);

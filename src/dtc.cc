@@ -188,22 +188,23 @@ int main(int argc, char* argv[]) {
     // initialize the chip sizes as 2d vectors, rows=input_events, cols=nchips
     std::vector<std::vector<unsigned short>> vec_event_chip_sizes(input_events, std::vector<unsigned short>(nchips));
     std::vector<std::vector<unsigned short>> vec_event_chip_parse_time(input_events, std::vector<unsigned short>(nchips));
+    std::vector<std::string> chip_basename_list(nchips);
     // be ready to write the order of chips into txt file
-    std::ofstream log_fn_list(output_dir+"/ordered_chips.txt");
+    std::ofstream os_chip_order(output_dir+"/ordered_chips.csv");
     std::cout<<"Reading root file for "<<dtcname<<" nchips="<<nchips<<std::endl;
+    os_chip_order<<"index  dtc    barrel layer  disk   module chip"<<std::endl;
     for (int ichip=0; ichip<nchips; ichip++) {
         TTreeReader chip_reader(vec_trees[ichip]);
-        TTreeReaderValue<int> branch_dtc(chip_reader, "dtc");
-        TTreeReaderValue<bool> branch_barrel(chip_reader, "barrel");
-        TTreeReaderValue<int> branch_layer(chip_reader, "barrel");
-        TTreeReaderValue<int> branch_disk(chip_reader, "barrel");
-        TTreeReaderValue<int> branch_module_id(chip_reader, "barrel");
-        TTreeReaderValue<int> branch_module_index(chip_reader, "barrel");
-        TTreeReaderValue<int> branch_size_pad(chip_reader, "stream_size_chip_aurora_pad");
-        TTreeReaderValue<int> branch_parse_time(chip_reader, "parsing_time");
+        TTreeReaderValue<int>  branch_dtc          ( chip_reader , "dtc");
+        TTreeReaderValue<bool> branch_barrel       ( chip_reader , "barrel");
+        TTreeReaderValue<int>  branch_layer        ( chip_reader , "layer");
+        TTreeReaderValue<int>  branch_disk         ( chip_reader , "disk");
+        TTreeReaderValue<int>  branch_module_id    ( chip_reader , "module_id");
+        TTreeReaderValue<int>  branch_module_index ( chip_reader , "module_index");
+        TTreeReaderValue<int>  branch_size_pad     ( chip_reader , "stream_size_chip_aurora_pad");
+        TTreeReaderValue<int>  branch_parse_time   ( chip_reader , "parsing_time");
         int ievent = 0;
-        std::cout<<chip_reader.GetEntries()<<std::endl;
-        chip_reader.SetEntry(0);
+        chip_reader.Restart();
         while (chip_reader.Next()) {
             assert(*branch_size_pad < 65536);
             assert(*branch_parse_time < 65536);
@@ -211,36 +212,37 @@ int main(int argc, char* argv[]) {
             vec_event_chip_parse_time[ievent][ichip] = *branch_parse_time;
             ievent += 1;
         }
+        chip_reader.Restart();
+        chip_reader.Next();
         assert(ievent==input_events);
         std::regex rgx("module([0-9]+)chip([0-9]+)");
         std::smatch matches;
         std::string treename = vec_trees[ichip]->GetName();
-        if (std::regex_search(treename, matches, rgx)) {
-            cout<<"number of matches="<<matches.size()<<endl;
-            cout<<"groups: ";
-            for (auto match : matches) cout<<match.str();
-            cout<<endl;
-        }
+        std::regex_search(treename, matches, rgx);
+        assert(matches.size()==3);
+        os_chip_order<<std::setw(7)<<std::left<<matches[1].str();
+        os_chip_order<<std::setw(7)<<std::left<<*branch_dtc;
+        os_chip_order<<std::setw(7)<<std::left<<*branch_barrel;
+        os_chip_order<<std::setw(7)<<std::left<<*branch_layer;
+        os_chip_order<<std::setw(7)<<std::left<<*branch_disk;
+        os_chip_order<<std::setw(7)<<std::left<<*branch_module_id;
+        os_chip_order<<std::setw(7)<<std::left<<matches[2].str();
+        os_chip_order<<std::endl;
+        // construct basename
+        std::string chip_basename("dtc");
+        chip_basename += std::to_string(*branch_dtc)    + "isBarrel";
+        chip_basename += std::to_string(*branch_barrel) + "layer";
+        chip_basename += std::to_string(*branch_layer)  + "disk";
+        chip_basename += std::to_string(*branch_disk)   + "module";
+        chip_basename += std::to_string(*branch_module_id) + "chip";
+        chip_basename += matches[2].str();
+        chip_basename_list[ichip] = chip_basename;
     }
-    log_fn_list.close();
-    return 0;
-
-
-    std::vector<std::string> dtc_binary_fn_list;
-    boost::filesystem::path input_dir(input_dirname);
-    for (auto iter_fn=boost::filesystem::directory_iterator(input_dir); iter_fn != boost::filesystem::directory_iterator(); iter_fn++) {
-        if ( is_directory(iter_fn->path()) ) continue;
-        string filename = iter_fn->path().string();
-        if ( filename.find("dtc") == std::string::npos ) continue;
-        dtc_binary_fn_list.push_back(filename);
-    }
+    os_chip_order.close();
 
     // read config
     std::cout<< "Number of chips mapped to DTC = " << nchips <<endl;
     ChipConfigReader config(config_filename);
-    // convert filenames to vector of basename (keys used in chip config mapping)
-    std::vector<std::string> chip_basename_list(nchips);
-    std::transform(dtc_binary_fn_list.begin(), dtc_binary_fn_list.end(), chip_basename_list.begin(), ChipConfigReader::filename_to_basename);
 
     // assign the chips to the event builders
     std::vector<int> eb_assignment = config.assign_chips_to_event_builders(chip_basename_list, OUTPUT_LINKS);
@@ -282,7 +284,7 @@ int main(int argc, char* argv[]) {
     // read the elink to chip ratio and configure data player accordingly
     std::vector<float> elink_chip_ratio = config.GetNELinkVector(chip_basename_list); // n-elinks/n-chips for each chip
     if (DEBUG) std::cout<<"Creating player object"<<std::endl;
-    auto player  = std::make_shared<ChipDataPlayer>(dtc_binary_fn_list, nchips, elink_chip_ratio, RANDOM_L1, TRIGGER_RULE); // there are 60 modules in dtc
+    auto player  = std::make_shared<ChipDataPlayer>(vec_event_chip_sizes, nchips, elink_chip_ratio, RANDOM_L1, TRIGGER_RULE);
     if (DEBUG) std::cout<<"Created player object"<<std::endl;
     circuit->add_component(player);
     std::vector<std::shared_ptr<DTCEventBuilder>> evt_builders;
@@ -293,8 +295,8 @@ int main(int argc, char* argv[]) {
 
     std::vector<std::shared_ptr<FIFO64>>              fifos_input;
     std::vector<std::shared_ptr<FIFO64>>              fifos_output_data;
-    std::vector<std::shared_ptr<FIFO16>>               fifos_output_control;
-    std::vector<std::shared_ptr<EventBoundaryFinder>>  ebfs;
+    std::vector<std::shared_ptr<FIFO16>>              fifos_output_control;
+    std::vector<std::shared_ptr<EventBoundaryFinder>> ebfs;
     for (int ichip=0; ichip<nchips; ichip++){
         int ieb = eb_assignment[ichip];
         int ichip_per_eb = ichip_to_ichip_per_eb[ichip];
@@ -416,7 +418,11 @@ int main(int argc, char* argv[]) {
             i_event_per_eb[ieb]++;
         }
         int min_i_event_among_eb = *std::min_element(i_event_per_eb.begin(), i_event_per_eb.end());
-        //if (i_tick%5000==0)cerr<<min_i_event_among_eb<<endl;
+        //if (i_tick%5000==0){
+        //    cerr<<min_i_event_among_eb<<endl;
+        //    for (auto ievt : i_event_per_eb) cerr<<ievt;
+        //    cerr<<endl;
+        //}
         if (min_i_event_among_eb > i_event) {
             i_event = min_i_event_among_eb;
             // progress bar
