@@ -47,6 +47,7 @@ int main(int argc, char* argv[]) {
     std::string dtcname("dtc");
     std::string tag("");
     int nevents=1000;
+    int NE=1;
 
     // argument parsing
     std::string help_msg("Usage: ./build/dtc [options]\n\
@@ -57,6 +58,7 @@ int main(int argc, char* argv[]) {
             --config/-c CONFIG_FILENAME:    Config file that include n-elinks and n-events-compression per chip, by default uses config/default.config.\n\
             --dtc/-d DTC:                   DTC number to simulate. \n\
             --nevents/-n N_Events:          Number of events to run before the end of simulation. Default value = 1000.\n\
+            --event-concat/-e NE:           Number of events concatenated in the same stream. Default value = 1. Inccur parsing time if > 1.\n\
             --random-l1 L1-TYPE:            L1-TYPE is boolean, set whether L1 trigger rate random with average of 750kHZ or just constantly 750kHz.\n\
             --no-trigger-rule:              Only effective for the random L1 trigger mode, disables the trigger rules.\n\
             --output-links N_OptLinks:      set the number of output optical links, each connects to a event builder. Default value = 12.\n");
@@ -141,6 +143,17 @@ int main(int argc, char* argv[]) {
             }
             else {
                 std::cerr<<"--nevents/-n option requires one argument."<<std::endl;
+                return 1;
+            }
+            continue;
+        }
+        if (std::string(argv[iarg])=="--event-concat" || std::string(argv[iarg])=="-e") {
+            if (iarg+1 < argc) {
+                std::string input_NE_str(argv[++iarg]);
+                NE = stoi(input_NE_str);
+            }
+            else {
+                std::cerr<<"--event-concat/-e option requires one argument."<<std::endl;
                 return 1;
             }
             continue;
@@ -303,7 +316,7 @@ int main(int argc, char* argv[]) {
         fifos_input.push_back(std::make_shared<FIFO64>());
         fifos_output_data.push_back(std::make_shared<FIFO64>());
         fifos_output_control.push_back(std::make_shared<FIFO16>());
-        ebfs.push_back(std::make_shared<EventBoundaryFinder>());
+        ebfs.push_back(std::make_shared<EventBoundaryFinder>(NE>1));
         circuit->add_component(fifos_input[ichip]);
         circuit->add_component(fifos_output_data[ichip]);
         circuit->add_component(fifos_output_control[ichip]);
