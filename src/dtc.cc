@@ -297,7 +297,7 @@ int main(int argc, char* argv[]) {
     // read the elink to chip ratio and configure data player accordingly
     std::vector<float> elink_chip_ratio = config.GetNELinkVector(chip_basename_list); // n-elinks/n-chips for each chip
     if (DEBUG) std::cout<<"Creating player object"<<std::endl;
-    auto player  = std::make_shared<ChipDataPlayer>(vec_event_chip_sizes, nchips, elink_chip_ratio, RANDOM_L1, TRIGGER_RULE);
+    auto player  = std::make_shared<ChipDataPlayer>(nchips, vec_event_chip_sizes, vec_event_chip_parse_time, elink_chip_ratio, NE, RANDOM_L1, TRIGGER_RULE);
     if (DEBUG) std::cout<<"Created player object"<<std::endl;
     circuit->add_component(player);
     std::vector<std::shared_ptr<DTCEventBuilder>> evt_builders;
