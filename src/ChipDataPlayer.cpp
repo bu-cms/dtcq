@@ -8,7 +8,8 @@ ChipDataPlayer::ChipDataPlayer(int _nchips, vector<vector<unsigned short>> _vec_
     max_event_idx(_vec_event_chip_sizes.size()), new_event_flag(_nchips, true),
     vec_event_chip_sizes(_vec_event_chip_sizes), NE(_NE),
     remaining_bits_for_triggered_events(_nchips),
-    queued_empty_event(_nchips), vec_event_chip_parse_time(_vec_event_chip_parse_time)
+    queued_empty_event(_nchips), queued_chip_parse_time(_nchips),
+    vec_event_chip_parse_time(_vec_event_chip_parse_time)
     {
     assert(_nchips == vec_event_chip_sizes[0].size());
     assert(_nchips == elink_chip_ratio.size());
@@ -137,8 +138,8 @@ void ChipDataPlayer::tick() {
                     value = value << 8;
                     value = value | parsing_time_iboundary;
                 }
-                cerr<<"has_event_boundary="<<has_event_boundary<<"number_of_boundaries="<<number_of_boundaries<<endl;
-                cerr<<bitset<64>(value)<<endl;
+                //cerr<<"has_event_boundary="<<has_event_boundary<<"number_of_boundaries="<<number_of_boundaries<<endl;
+                //cerr<<bitset<64>(value)<<endl;
                 out_read[ichip].set_value(true);
                 out_data[ichip].set_value(value);
             }

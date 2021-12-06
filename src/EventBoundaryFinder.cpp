@@ -59,7 +59,7 @@ void EventBoundaryFinder::tick() {
         control_word |= ((uint16_t) 3) << 14;
         uint8_t n_boundaries = ((uint8_t)0xff)>>1; // to capture 2-8 bits
         n_boundaries = n_boundaries & (in_data>>56);
-        cout<<"# "<<(int)n_boundaries<<" #"<<endl;
+        //cout<<"# "<<(int)n_boundaries<<" #"<<endl;
         assert(n_boundaries<=5); // unlikely but 5 events with 11 bits each?
         for (uint8_t iboundary=0; iboundary<n_boundaries; iboundary++) {
             // append halt time related to each new event
