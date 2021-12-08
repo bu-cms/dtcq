@@ -56,7 +56,7 @@ vector<float> ChipConfigReader::GetAvgSizeVector(vector<string> chip_filename_ve
     return ret;
 }
 
-vector<int> ChipConfigReader::assign_chips_to_event_builders(vector<string> chip_basename_list, int n_event_builders) {
+vector<int> ChipConfigReader::assign_chips_as_original(vector<string> chip_basename_list, int n_event_builders) {
     assert(n_event_builders>0);
     vector<float> chip_avg_size = this->GetAvgSizeVector(chip_basename_list);
     vector<int> assignment(chip_basename_list.size(),-1);
@@ -65,7 +65,7 @@ vector<int> ChipConfigReader::assign_chips_to_event_builders(vector<string> chip
     // assign chips in the order of basename mapping
     int eb_iter = 0;
     float current_size_allocated = 0;
-    std::cout<<"Assigning chips... Sum of event size="<<sum_of_size<<" threshold="<<size_threshold_per_eb<<std::endl;
+    std::cout<<"Assigning chips according to config file ordering... Sum of event size="<<sum_of_size<<" threshold="<<size_threshold_per_eb<<std::endl;
     std::cout<<"iEB\t|\tchip size\t|\tcumulated size\t|\tchip name"<<std::endl;
     for (string basename : ordered_basenames) {
         for (int ichip=0; ichip<chip_basename_list.size(); ichip++) {
@@ -90,4 +90,70 @@ vector<int> ChipConfigReader::assign_chips_to_event_builders(vector<string> chip
         }
     }
     return assignment;
+}
+
+vector<int> ChipConfigReader::assign_chips_as_random(vector<string> chip_basename_list, int n_event_builders) {
+    assert(n_event_builders>0);
+    vector<float> chip_avg_size = this->GetAvgSizeVector(chip_basename_list);
+    float sum_of_size = accumulate(chip_avg_size.begin(), chip_avg_size.end(), float(0));
+    float size_threshold_per_eb = sum_of_size / n_event_builders;
+    vector<int> shuffled_chips(chip_basename_list.size(), 0);
+    for (int i=0; i<shuffled_chips.size(); i++) shuffled_chips[i]=i;
+    std::shuffle(shuffled_chips.begin(), shuffled_chips.end(), std::default_random_engine(233));
+    vector<int> assignment(chip_basename_list.size(),-1);
+    vector<float> allocated_sizes(n_event_builders, 0);
+    std::cout<<"Assigning chips randomly... Sum of event size="<<sum_of_size<<" threshold="<<size_threshold_per_eb<<std::endl;
+    std::cout<<"iEB\t|\tcumulated size"<<std::endl;
+    for (int ichip : shuffled_chips) {
+        int ieb_minsize = min_element(allocated_sizes.begin(), allocated_sizes.end()) - allocated_sizes.begin();
+        assignment[ichip] = ieb_minsize;
+        allocated_sizes[ieb_minsize] += chip_avg_size[ichip];
+    }
+    for (int ieb=0; ieb<n_event_builders; ieb++) {
+        std::cout<<ieb<<"\t|\t"<<allocated_sizes[ieb]<<std::endl;
+    }
+    return assignment;
+}
+
+vector<int> ChipConfigReader::assign_chips_as_sorted(vector<string> chip_basename_list, int n_event_builders) {
+    assert(n_event_builders>0);
+    vector<float> chip_avg_size = this->GetAvgSizeVector(chip_basename_list);
+    float sum_of_size = accumulate(chip_avg_size.begin(), chip_avg_size.end(), float(0));
+    float size_threshold_per_eb = sum_of_size / n_event_builders;
+    vector<int> sorted_chips(chip_basename_list.size());
+    std::iota(sorted_chips.begin(), sorted_chips.end(), 0);
+    std::stable_sort(sorted_chips.begin(), sorted_chips.end(), [&chip_avg_size](int i1, int i2) {return chip_avg_size[i1]<chip_avg_size[i2];});
+    vector<int> assignment(chip_basename_list.size(),-1);
+    vector<float> allocated_sizes(n_event_builders, 0);
+    std::cout<<"Assigning chips randomly... Sum of event size="<<sum_of_size<<" threshold="<<size_threshold_per_eb<<std::endl;
+    std::cout<<"iEB\t|\tcumulated size"<<std::endl;
+    for (int ichip : sorted_chips) {
+        int ieb_minsize = min_element(allocated_sizes.begin(), allocated_sizes.end()) - allocated_sizes.begin();
+        assignment[ichip] = ieb_minsize;
+        allocated_sizes[ieb_minsize] += chip_avg_size[ichip];
+    }
+    for (int ieb=0; ieb<n_event_builders; ieb++) {
+        std::cout<<ieb<<"\t|\t"<<allocated_sizes[ieb]<<std::endl;
+    }
+    return assignment;
+}
+
+vector<int> ChipConfigReader::assign_chips_to_event_builders(vector<string> chip_basename_list, int n_event_builders, std::string mode) {
+    // assign chips according to their original order in the config file
+    if (mode=="original"){
+        return this->assign_chips_as_original(chip_basename_list, n_event_builders);
+    }
+    // assign chips randomly but also try to balance load
+    else if (mode=="random"){
+        return this->assign_chips_as_random(chip_basename_list, n_event_builders);
+    }
+    else if (mode=="sorted"){
+        return this->assign_chips_as_sorted(chip_basename_list, n_event_builders);
+    }
+    else {
+        string msg="assignment mode ";
+        msg += mode;
+        msg += " unimplemented!";
+        throw std::runtime_error(msg);
+    }
 }

@@ -43,6 +43,7 @@ int main(int argc, char* argv[]) {
     bool TRIGGER_RULE=true;
     int OUTPUT_LINKS=12;
     std::string input_dirname("input_dtc11_10kevt");
+    std::string assignment_mode("original");
     std::string config_filename("config/default.config");
     std::string dtcname("dtc");
     std::string tag("");
@@ -55,6 +56,7 @@ int main(int argc, char* argv[]) {
             --debug:                        enable some debug output.\n\
             --dry-run:                      print out event builder assignment without actually running the simulation.\n\
             --input/-i INPUT_DIRNAME:       Change the input directory name, by default uses input_10k.\n\
+            --assignment/-a MODE:           Mode to assign chips to event builders. Can be orignal, random, or sorted.\n\
             --config/-c CONFIG_FILENAME:    Config file that include n-elinks and n-events-compression per chip, by default uses config/default.config.\n\
             --dtc/-d DTC:                   DTC number to simulate. \n\
             --nevents/-n N_Events:          Number of events to run before the end of simulation. Default value = 1000.\n\
@@ -72,6 +74,16 @@ int main(int argc, char* argv[]) {
             }
             else {
                 std::cerr<<"--input/-i option requires one argument."<<std::endl;
+                return 1;
+            }
+            continue;
+        }
+        if (std::string(argv[iarg])=="--assignment" || std::string(argv[iarg])=="-a") {
+            if (iarg+1 < argc) {
+                assignment_mode = argv[++iarg];
+            }
+            else {
+                std::cerr<<"--assignment/-a option requires one argument."<<std::endl;
                 return 1;
             }
             continue;
@@ -258,7 +270,7 @@ int main(int argc, char* argv[]) {
     ChipConfigReader config(config_filename);
 
     // assign the chips to the event builders
-    std::vector<int> eb_assignment = config.assign_chips_to_event_builders(chip_basename_list, OUTPUT_LINKS);
+    std::vector<int> eb_assignment = config.assign_chips_to_event_builders(chip_basename_list, OUTPUT_LINKS, assignment_mode);
     std::vector<int> nchips_per_eb(OUTPUT_LINKS, 0);
     std::vector<int> ichip_to_ichip_per_eb(nchips);
     for (int ichip=0; ichip<nchips; ichip++) {
