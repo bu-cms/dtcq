@@ -124,16 +124,17 @@ vector<int> ChipConfigReader::assign_chips_as_sorted(vector<string> chip_basenam
     std::iota(sorted_chips.begin(), sorted_chips.end(), 0);
     std::stable_sort(sorted_chips.begin(), sorted_chips.end(), [&chip_avg_size](int i1, int i2) {return chip_avg_size[i1]<chip_avg_size[i2];});
     vector<int> assignment(chip_basename_list.size(),-1);
-    vector<float> allocated_sizes(n_event_builders, 0);
-    std::cout<<"Assigning chips randomly... Sum of event size="<<sum_of_size<<" threshold="<<size_threshold_per_eb<<std::endl;
+    std::cout<<"Assigning chips as rate-sorted... Sum of event size="<<sum_of_size<<" threshold="<<size_threshold_per_eb<<std::endl;
     std::cout<<"iEB\t|\tcumulated size"<<std::endl;
+    int eb_iter = 0;
+    float current_size_allocated = 0;
     for (int ichip : sorted_chips) {
-        int ieb_minsize = min_element(allocated_sizes.begin(), allocated_sizes.end()) - allocated_sizes.begin();
-        assignment[ichip] = ieb_minsize;
-        allocated_sizes[ieb_minsize] += chip_avg_size[ichip];
-    }
-    for (int ieb=0; ieb<n_event_builders; ieb++) {
-        std::cout<<ieb<<"\t|\t"<<allocated_sizes[ieb]<<std::endl;
+        assignment[ichip] = eb_iter;
+        current_size_allocated += chip_avg_size[ichip];
+        if (current_size_allocated > (eb_iter+1) * size_threshold_per_eb) {
+            std::cout<<eb_iter<<"\t|\t"<<current_size_allocated<<std::endl;
+            eb_iter++;
+        }
     }
     return assignment;
 }

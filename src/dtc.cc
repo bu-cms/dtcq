@@ -188,6 +188,11 @@ int main(int argc, char* argv[]) {
     std::cout<<"Running Mode: Randome L1="<<RANDOM_L1<<" TRIGGER_RULE="<<TRIGGER_RULE<<" OUTPUT_LINKS="<<OUTPUT_LINKS;
     output_dir+="_olinks";
     output_dir+=to_string(OUTPUT_LINKS);
+    output_dir+="_NE";
+    output_dir+=to_string(NE);
+    output_dir+="_";
+    output_dir+=assignment_mode;
+    output_dir+="Assignment";
     output_dir+="_N";
     output_dir+=to_string(nevents);
     std::cout<<" Output dir="<<output_dir<<std::endl;
