@@ -71,7 +71,7 @@ void ChipDataPlayer::tick() {
                 potential_trigger_counts += 1;
                 if (time_since_recent_L1As.size()>=trigger_rule_max_L1As) {
                     blocked_trigger_counts += 1;
-                    cout<<"Blocked trigger according to trigger rule, current ratio = "<<blocked_trigger_counts/potential_trigger_counts<<endl;
+                    cout<<"Blocked trigger according to trigger rule, current ratio = "<<100.0*blocked_trigger_counts/potential_trigger_counts<<"%"<<endl;
                 }
                 else {
                     triggered_events++;

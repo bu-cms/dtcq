@@ -362,6 +362,7 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    clock_t timer = clock();
     int inactive_time = 0;
     unsigned long long i_tick = 0;
     std::vector<int> i_event_per_eb(evt_builders.size(),0);
@@ -446,9 +447,13 @@ int main(int argc, char* argv[]) {
         circuit->tick();
         for (int ichip=0; ichip<nchips; ichip++) {
             int value = fifos_output_data[ichip]->d_get_buffer_size();
-            ofstreamvector_output_fifo_data[ichip].write(reinterpret_cast<const char*>(&value), sizeof(value) );
+            assert( (value >= std::numeric_limits<uint16_t>::min()) && (value <= std::numeric_limits<uint16_t>::max()) );
+            uint16_t shortened_value = (uint16_t) value;
+            ofstreamvector_output_fifo_data[ichip].write(reinterpret_cast<const char*>(&shortened_value), sizeof(shortened_value) );
             value = fifos_input[ichip]->d_get_buffer_size();
-            ofstreamvector_input_fifo[ichip].write(reinterpret_cast<const char*>(&value), sizeof(value) );
+            assert( (value >= std::numeric_limits<uint16_t>::min()) && (value <= std::numeric_limits<uint16_t>::max()) );
+            shortened_value = (uint16_t) value;
+            ofstreamvector_input_fifo[ichip].write(reinterpret_cast<const char*>(&shortened_value), sizeof(shortened_value) );
         };
         for (int ieb=0; ieb<evt_builders.size(); ieb++) if (evt_builders[ieb]->out_event_ready.get_value()) {
             i_event_per_eb[ieb]++;
@@ -475,5 +480,9 @@ int main(int argc, char* argv[]) {
             if (i_event>=nevents) break;
         }
     }
-    cout<<std::endl<<"total ticks="<<i_tick<<endl;
+    timer = clock() - timer;
+    double seconds = ((double) timer) / CLOCKS_PER_SEC;
+    std::cout<<std::endl<<"total ticks="<<i_tick<<endl;
+    std::cout<<"simulation running time="<<seconds<<" seconds"<<std::endl;
+    std::cout<<"simulation frequency="<<1.0*i_tick/seconds<<" HZ"<<std::endl;
 }
