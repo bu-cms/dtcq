@@ -49,6 +49,7 @@ int main(int argc, char* argv[]) {
     std::string tag("");
     int nevents=1000;
     int NE=1;
+    int PERIOD=0;
 
     // argument parsing
     std::string help_msg("Usage: ./build/dtc [options]\n\
@@ -63,6 +64,7 @@ int main(int argc, char* argv[]) {
             --event-concat/-e NE:           Number of events concatenated in the same stream. Default value = 1. Inccur parsing time if > 1.\n\
             --random-l1 L1-TYPE:            L1-TYPE is boolean, set whether L1 trigger rate random with average of 750kHZ or just constantly 750kHz.\n\
             --no-trigger-rule:              Only effective for the random L1 trigger mode, disables the trigger rules.\n\
+            --log-max-only PERIOD:          Log only the global maximum every PERIOD of clock cycles.\n\
             --output-links N_OptLinks:      set the number of output optical links, each connects to a event builder. Default value = 12.\n");
     for (int iarg =0; iarg<argc; iarg++) {
         if (iarg==0) continue;
@@ -137,6 +139,17 @@ int main(int argc, char* argv[]) {
             DRY_RUN = true;
             continue;
         }
+        if (std::string(argv[iarg])=="--log-max-only") {
+            if (iarg+1 < argc) {
+                std::string max_period_str(argv[++iarg]);
+                PERIOD = stoi(max_period_str);
+            }
+            else {
+                std::cerr<<"--log-max-only option requires one argument."<<std::endl;
+                return 1;
+            }
+            continue;
+        }
         if (std::string(argv[iarg])=="--output-links") {
             if (iarg+1 < argc) {
                 std::string output_links_str(argv[++iarg]);
@@ -195,6 +208,10 @@ int main(int argc, char* argv[]) {
     output_dir+="Assignment";
     output_dir+="_N";
     output_dir+=to_string(nevents);
+    if (PERIOD>0) {
+        output_dir+="_MaxOnly";
+        output_dir+=to_string(PERIOD);
+    }
     std::cout<<" Output dir="<<output_dir<<std::endl;
     boost::filesystem::create_directories("output");
     boost::filesystem::create_directories(output_dir);
@@ -367,6 +384,8 @@ int main(int argc, char* argv[]) {
     unsigned long long i_tick = 0;
     std::vector<int> i_event_per_eb(evt_builders.size(),0);
     int i_event = 0; //technically going to be the min value in i_event_per_eb
+    uint16_t global_maximum_input_fifo = 0;
+    uint16_t global_maximum_output_fifo_data = 0;
     std::vector<std::ofstream> ofstreamvector_output_fifo_data;
     std::vector<std::ofstream> ofstreamvector_input_fifo;
     for (int ichip=0; ichip<nchips; ichip++) {
@@ -445,15 +464,25 @@ int main(int argc, char* argv[]) {
         i_tick++;
         //std::cout<<"tick="<<i_tick<<std::endl;
         circuit->tick();
+        if (PERIOD>0 && i_tick%PERIOD==0) {
+            ofstreamvector_output_fifo_data[0].write(reinterpret_cast<const char*>(&global_maximum_output_fifo_data), sizeof(global_maximum_output_fifo_data) );
+            ofstreamvector_input_fifo[0].write(reinterpret_cast<const char*>(&global_maximum_input_fifo), sizeof(global_maximum_input_fifo) );
+            global_maximum_input_fifo = 0;
+            global_maximum_output_fifo_data = 0;
+        }
         for (int ichip=0; ichip<nchips; ichip++) {
             int value = fifos_output_data[ichip]->d_get_buffer_size();
             assert( (value >= std::numeric_limits<uint16_t>::min()) && (value <= std::numeric_limits<uint16_t>::max()) );
             uint16_t shortened_value = (uint16_t) value;
-            ofstreamvector_output_fifo_data[ichip].write(reinterpret_cast<const char*>(&shortened_value), sizeof(shortened_value) );
+            global_maximum_output_fifo_data = std::max(global_maximum_output_fifo_data, shortened_value);
+            if (PERIOD==0) 
+                ofstreamvector_output_fifo_data[ichip].write(reinterpret_cast<const char*>(&shortened_value), sizeof(shortened_value) );
             value = fifos_input[ichip]->d_get_buffer_size();
             assert( (value >= std::numeric_limits<uint16_t>::min()) && (value <= std::numeric_limits<uint16_t>::max()) );
             shortened_value = (uint16_t) value;
-            ofstreamvector_input_fifo[ichip].write(reinterpret_cast<const char*>(&shortened_value), sizeof(shortened_value) );
+            global_maximum_input_fifo = std::max(global_maximum_input_fifo, shortened_value);
+            if (PERIOD==0) 
+                ofstreamvector_input_fifo[ichip].write(reinterpret_cast<const char*>(&shortened_value), sizeof(shortened_value) );
         };
         for (int ieb=0; ieb<evt_builders.size(); ieb++) if (evt_builders[ieb]->out_event_ready.get_value()) {
             i_event_per_eb[ieb]++;
@@ -485,4 +514,8 @@ int main(int argc, char* argv[]) {
     std::cout<<std::endl<<"total ticks="<<i_tick<<endl;
     std::cout<<"simulation running time="<<seconds<<" seconds"<<std::endl;
     std::cout<<"simulation frequency="<<1.0*i_tick/seconds<<" HZ"<<std::endl;
+    if (PERIOD==0) {
+        std::cout<<"input FIFO global maximum ="<<int(global_maximum_input_fifo)<<std::endl;
+        std::cout<<"output FIFO (data) global maximum ="<<int(global_maximum_output_fifo_data)<<std::endl;
+    }
 }
