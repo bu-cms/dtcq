@@ -4,10 +4,14 @@
 #include <include/Ports.h>
 #include <stdint.h>
 #include <queue>
+#include <assert.h>
 using namespace std;
 
 class EventBoundaryFinder : public Component {
     public:
+        bool do_parse;
+
+        // Define input and output ports
 		InputPort<uint64_t> in_fifo_i1_data;
 		InputPort<bool> in_fifo_i1_data_valid;
 		InputPort<bool> in_fifo_i1_data_empty;
@@ -18,8 +22,12 @@ class EventBoundaryFinder : public Component {
         OutputPort<bool> out_fifo_o2_read;
         OutputPort<uint16_t> out_fifo_o2_data;
 
-        EventBoundaryFinder();
+        EventBoundaryFinder(bool _do_parse=false);
 		void tick() override;
+    private:
+        uint32_t halt_time = 0;
+        queue<uint64_t> queued_data_words;
+        queue<uint16_t> queued_control_words;
 
 };
 

@@ -1,0 +1,10 @@
+## RD53B configuration files
+
+This directory include the config files that describe the number of e-links (or share of a e-link) allocated to each chip. For now we only include a quarter of the detector, covering DTC11-DTC17.
+Each line in the config file is a chip. The first column is a string containing the detector parameters. The second column is the number of elinks assigned to this chip. Third column is meaningless in the current setup. The fourth column is an rough estimate of the data rate.
+
+### Versions:
+
+* default.config : corresponding the designed cabling map as of year 2021. Studies show that this would incur >100% link occupancy.
+* v5.config : add elinks to TEPX R1, R3, TFPX R4. Reduced link occupancy to these areas, but still see high occupancies in TEPX R2, R4, TFPX R2, R3.
+* v7.config : further add elinks to TEPX R2, R4, TFPX R2, R3.
