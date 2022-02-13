@@ -436,7 +436,7 @@ def main():
     args = commandline()
     while args.inpath[-1] == "/":
         args.inpath = args.inpath[:-1]
-    outdir = "{}".format(args.inpath.split("/")[-1])
+    outdir = "output/{}".format(args.inpath.split("/")[-1])
     if not os.path.exists(outdir):
         os.makedirs(outdir)
     eb_assignment = get_eb_assignment(args.inpath, outdir)

@@ -199,6 +199,8 @@ int main(int argc, char* argv[]) {
     if (RANDOM_L1) output_dir+="_randomL1"; else output_dir+="_constL1";
     if (RANDOM_L1 && !TRIGGER_RULE)  output_dir+="NoTriggerRule";
     std::cout<<"Running Mode: Randome L1="<<RANDOM_L1<<" TRIGGER_RULE="<<TRIGGER_RULE<<" OUTPUT_LINKS="<<OUTPUT_LINKS;
+    output_dir+="_";
+    output_dir+=config_filename.substr(config_filename.find_last_of("/")+1, config_filename.find_last_of(".")-config_filename.find_last_of("/")-1);
     output_dir+="_olinks";
     output_dir+=to_string(OUTPUT_LINKS);
     output_dir+="_NE";
@@ -386,6 +388,7 @@ int main(int argc, char* argv[]) {
     int i_event = 0; //technically going to be the min value in i_event_per_eb
     uint16_t global_maximum_input_fifo = 0;
     uint16_t global_maximum_output_fifo_data = 0;
+    // ofstream to store mem usage corresponding to each chip
     std::vector<std::ofstream> ofstreamvector_output_fifo_data;
     std::vector<std::ofstream> ofstreamvector_input_fifo;
     for (int ichip=0; ichip<nchips; ichip++) {
@@ -397,6 +400,9 @@ int main(int argc, char* argv[]) {
         if (!ofstreamvector_output_fifo_data[ichip]) {std::cerr<<"Unable to write to "<<ichip_output_fname<<std::endl; return 4;}
         if (!ofstreamvector_input_fifo[ichip]) {std::cerr<<"Unable to write to "<<ichip_input_fname<<std::endl; return 4;}
     }
+    // ofstream to store global maximum within each Period
+    std::ofstream ofstream_period_max_output_fifo_data(output_dir+"/period_max_output_fifo_data.bin", std::ios::binary);
+    std::ofstream ofstream_period_max_input_fifo(output_dir+"/period_max_input_fifo.bin", std::ios::binary);
     std::cout<<"auto-ticking..."<<std::endl;
     while (true)
     {
@@ -465,8 +471,9 @@ int main(int argc, char* argv[]) {
         //std::cout<<"tick="<<i_tick<<std::endl;
         circuit->tick();
         if (PERIOD>0 && i_tick%PERIOD==0) {
-            ofstreamvector_output_fifo_data[0].write(reinterpret_cast<const char*>(&global_maximum_output_fifo_data), sizeof(global_maximum_output_fifo_data) );
-            ofstreamvector_input_fifo[0].write(reinterpret_cast<const char*>(&global_maximum_input_fifo), sizeof(global_maximum_input_fifo) );
+            ofstream_period_max_output_fifo_data.write(reinterpret_cast<const char*>(&global_maximum_output_fifo_data), sizeof(global_maximum_output_fifo_data) );
+            std::cout<<"current output FIFO global maximum = "<<global_maximum_output_fifo_data<<std::endl;
+            ofstream_period_max_input_fifo.write(reinterpret_cast<const char*>(&global_maximum_input_fifo), sizeof(global_maximum_input_fifo) );
             global_maximum_input_fifo = 0;
             global_maximum_output_fifo_data = 0;
         }
