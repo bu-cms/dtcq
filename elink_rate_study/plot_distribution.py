@@ -10,6 +10,7 @@ import argparse
 from cycler import cycler
 import copy
 import pickle as pkl
+from collections import defaultdict
 
 mpl.rcParams['axes.prop_cycle'] = cycler("color", plt.get_cmap("tab20c").colors)
 
@@ -93,6 +94,9 @@ def load_data_from_tree(tree, config_file_name, NE=1):
             raw_hits = raw_hits[selector][:,chip_id].flatten()
             raw_hits_mean = np.mean(raw_hits)
             raw_hits_std = np.std(raw_hits)
+            if len(set(tree_array[b"module_index"][selector]))!=1:
+                print(line)
+                continue
             assert len(set(tree_array[b"module_index"][selector]))==1 # make sure we are selecting one module
             raw_size_std = np.std(raw_chip_data)
             # concatenate adjacent NE events
@@ -123,6 +127,42 @@ def load_data_from_tree(tree, config_file_name, NE=1):
     return data
 
 def sort_data_to_elinks(data):
+    # first figure out how to assign chips to e-links
+    basename_to_nchips_nlinks_map = defaultdict(lambda : [0,0])
+    chip_to_elink_map = {}
+    for chip_entry in data:
+        basename_no_chip, chip_ID = chip_entry["basename"].split("chip")
+        nelinks = int(chip_entry["share"])
+        basename_to_nchips_nlinks_map[basename_no_chip][0] += 1
+        basename_to_nchips_nlinks_map[basename_no_chip][1] += nelinks
+    for basename in basename_to_nchips_nlinks_map.keys()::
+        nchips, nlinks = chip_to_nelinks_map[basename]
+        if nchips==2:
+            if nlinks==6:
+                chip_to_elink_map[basename] = {0:0, 1:3}
+            if nlinks==3:
+                chip_to_elink_map[basename] = {0:0, 1:1}
+            if nlinks==2:
+                chip_to_elink_map[basename] = {0:0, 1:1}
+            if nlinks==1: 
+                raise ValueError("not expecting nchips={} elinks={}".format(nchips, nlinks))
+            else:
+                raise ValueError("not expecting nchips={} elinks={}".format(nchips, nlinks))
+        else:
+            assert nchips==4
+            # Note, in case of 4 chips, chip ID assigned as:
+            # Chip 0 , Chip 2
+            # Chip 1 , Chip 3
+            # where right means larger col number == higher rate
+            if nlinks==4:
+                chip_to_elink_map[basename] = {0:0, 1:1, 2:2, 3:3}
+            if nlinks==3:
+                chip_to_elink_map[basename] = {0:0, 1:0, 2:1, 3:2}
+            if nlinks==2:
+                chip_to_elink_map[basename] = {0:0, 1:1, 2:0, 3:1}
+            if nlinks==1:
+                chip_to_elink_map[basename] = {0:0, 1:0, 2:0, 3:0}
+    # then do the assignment, especially merge chips for the same e-link
     finished = []
     unmerged = {}
     for chip_entry in data:
@@ -131,20 +171,7 @@ def sort_data_to_elinks(data):
         if chip_entry["share"].is_integer():
             nelinks = int(chip_entry["share"])
             for ielink in range(nelinks):
-                if nelinks == 1:
-                    assert ielink == 0
-                    if chip_entry["layout"][0]=="TEPX" and chip_entry["layout"][2]==1:
-                        elink_ID = chip_ID - 1
-                    else:
-                        elink_ID = chip_ID
-                elif nelinks == 2:
-                    assert chip_entry["layout"][0]=="TFPX" and chip_entry["layout"][2]==1
-                    elink_ID = 1 + ielink
-                elif nelinks == 3:
-                    assert chip_entry["layout"][0]=="TBPX" and chip_entry["layout"][1]==1
-                    elink_ID = 3*chip_ID + ielink
-                else:
-                    raise Exception("nelinks out of range??")
+                elink_ID = chip_to_elink_map[basename_no_chip] + ielink
                 elink_entry = {
                         "basename" : basename_no_chip + "elink{}".format(elink_ID),
                         "layout" : chip_entry["layout"],
@@ -161,12 +188,7 @@ def sort_data_to_elinks(data):
                 finished.append(elink_entry)
         else:
             elink_share = chip_entry["share"]
-            if elink_share == 0.5:
-                elink_ID = chip_ID // 2
-            elif elink_share == 0.25:
-                elink_ID = 0
-            else:
-                raise Exception("elink share invalid?? ({})".format(elink_share))
+            elink_ID = chip_to_elink_map[basename_no_chip]
             elink_basename = basename_no_chip + "elink{}".format(elink_ID)
             if not elink_basename in unmerged:
                 elink_entry = {
@@ -321,7 +343,7 @@ def plot_distribution(data, distribution, labels=["all"], stack=True, config_tag
 def command_line():
     parser = argparse.ArgumentParser(prog="Plotter.")
     parser.add_argument("ntuple", type=str, help="root file that contains rate information.")
-    parser.add_argument("--config", type=str, default="../config/default.config", help="config file as input.")
+    parser.add_argument("--config", type=str, default="../config/v5.config", help="config file as input.")
     parser.add_argument("--area", type=str, default="all", help="area of the detector to plot. Can be all, bydtc, bysection, TBPX_L1 etc.")
     parser.add_argument("--ne", type=int, default=1, help="number of events to be packed into the same stream, reduces padding needs. default=1.")
     parser.add_argument("--distribution", type=str, default="occupancy", help="distribution to plot, can be \"size\" or \"occupancy\".")
