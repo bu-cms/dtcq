@@ -16,6 +16,8 @@ mpl.rcParams['axes.prop_cycle'] = cycler("color", plt.get_cmap("tab20c").colors)
 
 plt.style.use(hep.style.CMS)
 
+newassignment=True
+
 def basename_to_module(basename):
     basename = basename.split("/")[-1] #remove parent dirs
     basename = basename.split(".")[0] #remove filetype
@@ -132,19 +134,22 @@ def sort_data_to_elinks(data):
     chip_to_elink_map = {}
     for chip_entry in data:
         basename_no_chip, chip_ID = chip_entry["basename"].split("chip")
-        nelinks = int(chip_entry["share"])
+        nelinks = float(chip_entry["share"])
         basename_to_nchips_nlinks_map[basename_no_chip][0] += 1
         basename_to_nchips_nlinks_map[basename_no_chip][1] += nelinks
-    for basename in basename_to_nchips_nlinks_map.keys()::
-        nchips, nlinks = chip_to_nelinks_map[basename]
+    for basename, (nchips, nlinks) in basename_to_nchips_nlinks_map.items():
+        if not int(nlinks)==nlinks:
+            print(nlinks)
+            exit()
+        nlinks = int(nlinks)
         if nchips==2:
             if nlinks==6:
                 chip_to_elink_map[basename] = {0:0, 1:3}
-            if nlinks==3:
+            elif nlinks==3:
                 chip_to_elink_map[basename] = {0:0, 1:1}
-            if nlinks==2:
+            elif nlinks==2:
                 chip_to_elink_map[basename] = {0:0, 1:1}
-            if nlinks==1: 
+            elif nlinks==1: 
                 raise ValueError("not expecting nchips={} elinks={}".format(nchips, nlinks))
             else:
                 raise ValueError("not expecting nchips={} elinks={}".format(nchips, nlinks))
@@ -156,12 +161,17 @@ def sort_data_to_elinks(data):
             # where right means larger col number == higher rate
             if nlinks==4:
                 chip_to_elink_map[basename] = {0:0, 1:1, 2:2, 3:3}
-            if nlinks==3:
+            elif nlinks==3:
                 chip_to_elink_map[basename] = {0:0, 1:0, 2:1, 3:2}
-            if nlinks==2:
-                chip_to_elink_map[basename] = {0:0, 1:1, 2:0, 3:1}
-            if nlinks==1:
+            elif nlinks==2:
+                if newassignment:
+                    chip_to_elink_map[basename] = {0:0, 1:1, 2:0, 3:1}
+                else:
+                    chip_to_elink_map[basename] = {0:0, 1:0, 2:1, 3:1}
+            elif nlinks==1:
                 chip_to_elink_map[basename] = {0:0, 1:0, 2:0, 3:0}
+            else:
+                raise ValueError("not expecting nchips={} elinks={}".format(nchips, nlinks))
     # then do the assignment, especially merge chips for the same e-link
     finished = []
     unmerged = {}
@@ -171,7 +181,7 @@ def sort_data_to_elinks(data):
         if chip_entry["share"].is_integer():
             nelinks = int(chip_entry["share"])
             for ielink in range(nelinks):
-                elink_ID = chip_to_elink_map[basename_no_chip] + ielink
+                elink_ID = chip_to_elink_map[basename_no_chip][chip_ID] + ielink
                 elink_entry = {
                         "basename" : basename_no_chip + "elink{}".format(elink_ID),
                         "layout" : chip_entry["layout"],
@@ -188,7 +198,7 @@ def sort_data_to_elinks(data):
                 finished.append(elink_entry)
         else:
             elink_share = chip_entry["share"]
-            elink_ID = chip_to_elink_map[basename_no_chip]
+            elink_ID = chip_to_elink_map[basename_no_chip][chip_ID]
             elink_basename = basename_no_chip + "elink{}".format(elink_ID)
             if not elink_basename in unmerged:
                 elink_entry = {
@@ -295,6 +305,10 @@ def organize_data(data_in, distribution):
     return data_out
 
 def plot_distribution(data, distribution, labels=["all"], stack=True, config_tag="default", version_tag="default", plot_tag="all", ylabel=None, ne=1, nopad=False):
+    # parse additional args
+    stack = args.stack
+    ne = args.ne
+    nopad = args.nopad
     fig,ax = plt.subplots(1,1)
     print("Plotting: distribution={}, labels={}, stack={}".format(distribution, labels, stack))
     x = [data[label] for label in labels]
@@ -353,6 +367,7 @@ def command_line():
     parser.add_argument("--nopad", action="store_true", help="do not apply padding, NE argument ignored.")
     parser.add_argument("--lumi", action="store_true", help="add lumi trigger")
     parser.add_argument("--newload", action="store_true", help="don't use cache.")
+    parser.add_argument("--no-unsim-effects", action="store_true", help="don't include unsimulated effects.")
     args = parser.parse_args()
     return args
 
@@ -361,6 +376,8 @@ def main():
     config_name = args.config
     config_tag = config_name.split("/")[-1]
     config_tag = config_tag.split(".")[0]
+    if newassignment:
+        config_tag += "_newassignment"
     #data = read_data_from_config(config_name)
     pkl_filename = args.ntuple.replace(".root", "{}_NE{}.pkl".format(config_tag,args.ne))
     version_tag = args.ntuple.split("/")[-2]
@@ -395,20 +412,20 @@ def main():
     distribution = args.distribution
     # make the plots
     if args.area=="all":
-        plot_distribution(data, distribution, labels=["all"], stack=args.stack, config_tag=config_tag, version_tag=version_tag, plot_tag="all", ylabel=ylabel, ne=args.ne, nopad=args.nopad)
+        plot_distribution(data, distribution, labels=["all"], config_tag=config_tag, version_tag=version_tag, plot_tag="all", ylabel=ylabel)
     elif args.area=="bydtc":
-        plot_distribution(data, distribution, labels=dtc_names, stack=args.stack, config_tag=config_tag, version_tag=version_tag, plot_tag="dtcs", ylabel=ylabel, ne=args.ne, nopad=args.nopad)
+        plot_distribution(data, distribution, labels=dtc_names, config_tag=config_tag, version_tag=version_tag, plot_tag="dtcs", ylabel=ylabel)
         if args.individual:
             for dtc_name in dtc_names:
-                plot_distribution(data, distribution, labels=[dtc_name], stack=args.stack, config_tag=config_tag, version_tag=version_tag, plot_tag=dtc_name, ylabel=ylabel, ne=args.ne, nopad=args.nopad)
+                plot_distribution(data, distribution, labels=[dtc_name], config_tag=config_tag, version_tag=version_tag, plot_tag=dtc_name, ylabel=ylabel)
     elif args.area=="bysection":
-        plot_distribution(data, distribution, labels=list(detector_sections.keys()), stack=args.stack, config_tag=config_tag, version_tag=version_tag, plot_tag="sections", ylabel=ylabel, ne=args.ne, nopad=args.nopad)
+        plot_distribution(data, distribution, labels=list(detector_sections.keys()), config_tag=config_tag, version_tag=version_tag, plot_tag="sections", ylabel=ylabel)
         if args.individual:
             for section_name in detector_sections.keys():
-                plot_distribution(data, distribution, labels=[section_name], stack=args.stack, config_tag=config_tag, version_tag=version_tag, plot_tag=section_name.replace(" ", "_"), ylabel=ylabel, ne=args.ne, nopad=args.nopad)
+                plot_distribution(data, distribution, labels=[section_name], config_tag=config_tag, version_tag=version_tag, plot_tag=section_name.replace(" ", "_"), ylabel=ylabel, )
     else:
         section_name = args.area.replace("_"," ")
-        plot_distribution(data, distribution, labels=[section_name], stack=args.stack, config_tag=config_tag, version_tag=version_tag, plot_tag=section_name.replace(" ", "_"), ylabel=ylabel, ne=args.ne, nopad=args.nopad)
+        plot_distribution(data, distribution, labels=[section_name], config_tag=config_tag, version_tag=version_tag, plot_tag=section_name.replace(" ", "_"), ylabel=ylabel)
 
     return 0
 
