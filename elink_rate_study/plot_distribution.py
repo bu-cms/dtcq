@@ -91,12 +91,14 @@ def load_data_from_tree(tree, config_file_name, NE=1):
             raw_chip_data = tree_array[b"stream_size_chip_aurora"]
             raw_hits = tree_array[b"raw_hits"]
             # select the unpadded data for module and chip
-            selector = (tree_array[b"dtc"]==dtc_id) & (tree_array[b"barrel"]==is_barrel) & (tree_array[b"layer"]==layer) & (tree_array[b"module_id"]==module_id) & (tree_array[b"disk"]==disk)
+            # if cabling map containing both IT and OT is used, dtc id can become 200 + original dtcid (which is small than 100). so we take a mod 100
+            selector = (tree_array[b"barrel"]==is_barrel) & (tree_array[b"layer"]==layer) & (tree_array[b"module_id"]==module_id) & (tree_array[b"disk"]==disk) & (tree_array[b"dtc"]%100==dtc_id) 
             raw_chip_data = raw_chip_data[selector][:,chip_id]
             raw_hits = raw_hits[selector][:,chip_id].flatten()
             raw_hits_mean = np.mean(raw_hits)
             raw_hits_std = np.std(raw_hits)
             if len(set(tree_array[b"module_index"][selector]))!=1:
+                print("match for the following module is {}".format(len(set(tree_array[b"module_index"][selector]))))
                 print(line)
                 continue
             assert len(set(tree_array[b"module_index"][selector]))==1 # make sure we are selecting one module
@@ -304,14 +306,20 @@ def organize_data(data_in, distribution):
         data_out[section_name] = np.array([get_distribution(i, distribution) for i in data_in if are_consistent_layout(layout, i["layout"])])
     return data_out
 
-def plot_distribution(data, distribution, labels=["all"], stack=True, config_tag="default", version_tag="default", plot_tag="all", ylabel=None, ne=1, nopad=False):
+def plot_distribution(data, distribution, args, labels=["all"], stack=True, config_tag="default", version_tag="default", plot_tag="all", ylabel=None, ne=1, nopad=False):
     # parse additional args
     stack = args.stack
     ne = args.ne
     nopad = args.nopad
     fig,ax = plt.subplots(1,1)
     print("Plotting: distribution={}, labels={}, stack={}".format(distribution, labels, stack))
-    x = [data[label] for label in labels]
+    # apply unsimulated effects
+    if not args.no_unsim_effects:
+        plt.text(1.0, 1.0, 'with un-simulated effects(10-20%)', horizontalalignment='right', verticalalignment='bottom', transform=ax.transAxes)
+        unsim_effect = lambda x : 1.2 if "TEPX" in x else 1.1
+        x = [data[label]*unsim_effect(label) for label in labels]
+    else:
+        x = [data[label] for label in labels]
     if stack:
         ax.hist(x, stacked=True, label=labels)
     else:
@@ -412,20 +420,20 @@ def main():
     distribution = args.distribution
     # make the plots
     if args.area=="all":
-        plot_distribution(data, distribution, labels=["all"], config_tag=config_tag, version_tag=version_tag, plot_tag="all", ylabel=ylabel)
+        plot_distribution(data, distribution, args, labels=["all"], config_tag=config_tag, version_tag=version_tag, plot_tag="all", ylabel=ylabel)
     elif args.area=="bydtc":
-        plot_distribution(data, distribution, labels=dtc_names, config_tag=config_tag, version_tag=version_tag, plot_tag="dtcs", ylabel=ylabel)
+        plot_distribution(data, distribution, args, labels=dtc_names, config_tag=config_tag, version_tag=version_tag, plot_tag="dtcs", ylabel=ylabel)
         if args.individual:
             for dtc_name in dtc_names:
-                plot_distribution(data, distribution, labels=[dtc_name], config_tag=config_tag, version_tag=version_tag, plot_tag=dtc_name, ylabel=ylabel)
+                plot_distribution(data, distribution, args, labels=[dtc_name], config_tag=config_tag, version_tag=version_tag, plot_tag=dtc_name, ylabel=ylabel)
     elif args.area=="bysection":
-        plot_distribution(data, distribution, labels=list(detector_sections.keys()), config_tag=config_tag, version_tag=version_tag, plot_tag="sections", ylabel=ylabel)
+        plot_distribution(data, distribution, args, labels=list(detector_sections.keys()), config_tag=config_tag, version_tag=version_tag, plot_tag="sections", ylabel=ylabel)
         if args.individual:
             for section_name in detector_sections.keys():
-                plot_distribution(data, distribution, labels=[section_name], config_tag=config_tag, version_tag=version_tag, plot_tag=section_name.replace(" ", "_"), ylabel=ylabel, )
+                plot_distribution(data, distribution, args, labels=[section_name], config_tag=config_tag, version_tag=version_tag, plot_tag=section_name.replace(" ", "_"), ylabel=ylabel)
     else:
         section_name = args.area.replace("_"," ")
-        plot_distribution(data, distribution, labels=[section_name], config_tag=config_tag, version_tag=version_tag, plot_tag=section_name.replace(" ", "_"), ylabel=ylabel)
+        plot_distribution(data, distribution, args, labels=[section_name], config_tag=config_tag, version_tag=version_tag, plot_tag=section_name.replace(" ", "_"), ylabel=ylabel)
 
     return 0
 
