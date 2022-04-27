@@ -57,11 +57,11 @@ def main():
             for line in input_file:
                 basename, share, ne, size = line.split("\t")
                 Section, Layer, Ring = module_to_layout(basename_to_module(basename))
-                if Section=="TEPX" and Ring==1 and float(share)==0.50:
+                if Section=="TEPX" and Ring==1:
                     share = "{:1.2f}".format(1.0)
-                if Section=="TEPX" and Ring==2 and "chip1" in basename:
-                    share = "{:1.2f}".format(2.0)
-                if Section=="TEPX" and Ring==3 and float(share)==0.25:
+                if Section=="TEPX" and Ring==2 and ("chip2" in basename or "chip3" in basename):
+                    share = "{:1.2f}".format(1.0)
+                if Section=="TEPX" and Ring==3:
                     share = "{:1.2f}".format(0.5)
                 if Section=="TEPX" and Ring==4:
                     share = "{:1.2f}".format(0.5)
