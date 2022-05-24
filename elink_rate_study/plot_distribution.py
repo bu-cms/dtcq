@@ -232,8 +232,6 @@ def sort_data_to_elinks(data):
             elink_share = chip_entry["share"]
             elink_ID = chip_to_elink_map[basename_no_chip][chip_ID]
             elink_basename = basename_no_chip + "elink{}".format(elink_ID)
-            if not type(chip_entry["raw_hits"]) == float:
-                print(chip_entry["raw_hits"], type(chip_entry["raw_hits"]))
             if not elink_basename in unmerged:
                 elink_entry = {
                         "basename" : basename_no_chip + "elink{}".format(elink_ID),
