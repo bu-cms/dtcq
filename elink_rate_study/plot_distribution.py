@@ -76,58 +76,86 @@ def read_data_from_config(config_file_name):
     return data
 
 def load_data_from_tree(tree, config_file_name, NE=1):
-    tree_array = tree.arrays(["barrel", "disk", "layer", "dtc", "module_id", "module_index", "stream_size_chip_aurora", "raw_hits"])
+    translate_dtc = lambda x : 11 + 10*((x-217)//7) + (x-217)%7
+    tree_array = tree.arrays(["barrel", "disk", "layer", "dtc", "module_id", "detid", "module_index", "stream_size_chip_aurora", "raw_hits", "nchip"])
     data = []
     with open(config_file_name) as config:
-        for line in config:
-            words = line.replace("\n","").split("\t")
-            basename = words[0]
-            elinks = float(words[1])
-            #evtsize = float(words[-1])
-            #elinks_occupancy = evtsize * (64/1000) * 0.75 / (1.28 * elinks)
-            module_cmssw_params = basename_to_module(basename)
-            (dtc_id, is_barrel, layer, disk, module_id, chip_id) = module_cmssw_params
-            layout = module_to_layout(module_cmssw_params)
-            raw_chip_data = tree_array[b"stream_size_chip_aurora"]
-            raw_hits = tree_array[b"raw_hits"]
-            # select the unpadded data for module and chip
-            # if cabling map containing both IT and OT is used, dtc id can become 200 + original dtcid (which is small than 100). so we take a mod 100
-            selector = (tree_array[b"barrel"]==is_barrel) & (tree_array[b"layer"]==layer) & (tree_array[b"module_id"]==module_id) & (tree_array[b"disk"]==disk) & (tree_array[b"dtc"]%100==dtc_id) 
-            raw_chip_data = raw_chip_data[selector][:,chip_id]
-            raw_hits = raw_hits[selector][:,chip_id].flatten()
-            raw_hits_mean = np.mean(raw_hits)
-            raw_hits_std = np.std(raw_hits)
-            if len(set(tree_array[b"module_index"][selector]))!=1:
-                print("match for the following module is {}".format(len(set(tree_array[b"module_index"][selector]))))
-                print(line)
+        for module_index in range(3892):
+            dtc_id = tree_array[b"dtc"][module_index]
+            #if dtc_id > 100:
+            #    dtc_id = translate_dtc(dtc_id)
+            if dtc_id > 20:
                 continue
-            assert len(set(tree_array[b"module_index"][selector]))==1 # make sure we are selecting one module
-            raw_size_std = np.std(raw_chip_data)
-            # concatenate adjacent NE events
-            nevents = len(raw_chip_data) - (len(raw_chip_data)%NE)
-            raw_chip_data = np.reshape(raw_chip_data[:nevents], (-1, NE))
-            raw_chip_data = np.sum(raw_chip_data, axis=1)
-            padding = 64 - raw_chip_data%64
-            padding[padding<6] += 64 # need to identify end of event by at least 6 continuous zeroes
-            pad_chip_data = raw_chip_data + padding
-            pad_data_std = np.std(raw_chip_data)/np.square(NE) # scale the std to event level (rather than every NE events)
-            raw_evtsize = np.sum(raw_chip_data)/nevents
-            pad_evtsize = np.sum(pad_chip_data)/nevents
-            raw_occupancy = raw_evtsize * 0.75 / (1.28 * elinks * 1000)
-            pad_occupancy = pad_evtsize * 0.75 / (1.28 * elinks * 1000)
-            data.append({
-                "basename" : basename,
-                "layout": layout,
-                "share" : elinks,
-                "raw_hits" : raw_hits_mean,
-                "raw_hits_std" : raw_hits_std,
-                "raw_size" : raw_evtsize,
-                "raw_size_std" : raw_size_std,
-                "pad_size" : pad_evtsize,
-                "pad_size_std" : pad_data_std,
-                "occupancy" : 100*raw_occupancy,
-                "padded_occupancy" : 100*pad_occupancy,
-                })
+            is_barrel = tree_array[b"barrel"][module_index]
+            layer = tree_array[b"layer"][module_index]
+            disk = tree_array[b"disk"][module_index]
+            module_id = tree_array[b"module_id"][module_index] if is_barrel else module_index
+            detid = tree_array[b"detid"][module_index]
+            nchips = tree_array[b"nchip"][module_index]
+            for chip_id in range(nchips):
+                config.seek(0)
+                FOUND = False
+                for line in config:
+                    words = line.replace("\n","").split("\t")
+                    basename = words[0]
+                    elinks = float(words[1])
+                    module_cmssw_params = basename_to_module(basename)
+                    (dtc_id_config, is_barrel_config, layer_config, disk_config, module_id_config, chip_id_config) = module_cmssw_params
+                    if (dtc_id_config, is_barrel_config, layer_config, disk_config, module_id_config*is_barrel_config, chip_id_config) == (dtc_id, is_barrel, layer, disk, module_id*is_barrel, chip_id):
+                        elinks = float(words[1])
+                        layout = module_to_layout(module_cmssw_params)
+                        basename = "dtc{}isBarrel{}layer{}disk{}module{}chip{}".format(dtc_id, is_barrel, layer, disk, module_index, chip_id)
+                        FOUND = True
+                        break
+                if not FOUND:
+                    print("cannot find matching layout for ", (dtc_id, is_barrel, layer, disk, module_id, chip_id))
+                    continue
+                raw_chip_data = tree_array[b"stream_size_chip_aurora"]
+                raw_hits = tree_array[b"raw_hits"]
+                # select the unpadded data for module and chip
+                # if cabling map containing both IT and OT is used, dtc id can become 200 + original dtcid (which is small than 100). so we take a mod 100
+                selector = (tree_array[b"module_index"]==module_index)
+                if not chip_id < len(raw_chip_data[selector][0]):
+                    print("for layout", (dtc_id, is_barrel, layer, disk, module_id), " out-of-bound chip_id: ", chip_id, " out of ", len(raw_chip_data[selector][0]))
+                    continue
+                raw_chip_data = raw_chip_data[selector][:,chip_id]
+                raw_hits = raw_hits[selector][:,chip_id].flatten()
+                raw_hits_mean = float(np.mean(raw_hits))
+                if not type(raw_hits_mean) == float:
+                    print(type(raw_hits_mean))
+                raw_hits_std = float(np.std(raw_hits))
+                if len(set(tree_array[b"module_index"][selector]))!=1:
+                    print("matches for the following module is {}".format(len(set(tree_array[b"module_index"][selector]))))
+                    print(line)
+                    continue
+                assert len(set(tree_array[b"module_index"][selector]))==1 # make sure we are selecting one module
+                raw_size_std = np.std(raw_chip_data)
+                # concatenate adjacent NE events
+                nevents = len(raw_chip_data) - (len(raw_chip_data)%NE)
+                raw_chip_data = np.reshape(raw_chip_data[:nevents], (-1, NE))
+                raw_chip_data = np.sum(raw_chip_data, axis=1)
+                padding = 64 - raw_chip_data%64
+                padding[padding<6] += 64 # need to identify end of event by at least 6 continuous zeroes
+                pad_chip_data = raw_chip_data + padding
+                pad_data_std = np.std(raw_chip_data)/np.square(NE) # scale the std to event level (rather than every NE events)
+                raw_evtsize = np.sum(raw_chip_data)/nevents
+                pad_evtsize = np.sum(pad_chip_data)/nevents
+                raw_occupancy = raw_evtsize * 0.75 / (1.28 * elinks * 1000)
+                pad_occupancy = pad_evtsize * 0.75 / (1.28 * elinks * 1000)
+                data.append({
+                    "basename" : basename,
+                    "detid" : detid,
+                    "layout": layout,
+                    "share" : elinks,
+                    "raw_hits" : raw_hits_mean,
+                    "raw_hits_std" : raw_hits_std,
+                    "raw_size" : raw_evtsize,
+                    "raw_size_std" : raw_size_std,
+                    "pad_size" : pad_evtsize,
+                    "pad_size_std" : pad_data_std,
+                    "occupancy" : 100*raw_occupancy,
+                    "padded_occupancy" : 100*pad_occupancy,
+                    })
     return data
 
 def sort_data_to_elinks(data):
@@ -186,6 +214,8 @@ def sort_data_to_elinks(data):
                 elink_ID = chip_to_elink_map[basename_no_chip][chip_ID] + ielink
                 elink_entry = {
                         "basename" : basename_no_chip + "elink{}".format(elink_ID),
+                        "detid" : chip_entry["detid"],
+                        "elink_id" : elink_ID,
                         "layout" : chip_entry["layout"],
                         "share" : 1,
                         "raw_hits" : chip_entry["raw_hits"]/nelinks,
@@ -202,9 +232,13 @@ def sort_data_to_elinks(data):
             elink_share = chip_entry["share"]
             elink_ID = chip_to_elink_map[basename_no_chip][chip_ID]
             elink_basename = basename_no_chip + "elink{}".format(elink_ID)
+            if not type(chip_entry["raw_hits"]) == float:
+                print(chip_entry["raw_hits"], type(chip_entry["raw_hits"]))
             if not elink_basename in unmerged:
                 elink_entry = {
                         "basename" : basename_no_chip + "elink{}".format(elink_ID),
+                        "detid" : chip_entry["detid"],
+                        "elink_id" : elink_ID,
                         "layout" : chip_entry["layout"],
                         "share" : elink_share,
                         "raw_hits" : chip_entry["raw_hits"],
@@ -219,13 +253,13 @@ def sort_data_to_elinks(data):
                 unmerged[elink_basename] = elink_entry
             else:
                 unmerged[elink_basename]["share"] += elink_share
-                unmerged[elink_basename]["raw_hits"] += chip_entry["raw_hits"],
-                unmerged[elink_basename]["raw_hits_std"] += chip_entry["raw_hits"]*np.sqrt(elink_share),
+                unmerged[elink_basename]["raw_hits"] += chip_entry["raw_hits"]
+                unmerged[elink_basename]["raw_hits_std"] += chip_entry["raw_hits"]*np.sqrt(elink_share)
                 unmerged[elink_basename]["raw_size"] += chip_entry["raw_size"]
-                unmerged[elink_basename]["raw_size_std"] += chip_entry["raw_size_std"]*np.sqrt(elink_share),
+                unmerged[elink_basename]["raw_size_std"] += chip_entry["raw_size_std"]*np.sqrt(elink_share)
                 unmerged[elink_basename]["occupancy"] += chip_entry["occupancy"]*elink_share
                 unmerged[elink_basename]["pad_size"] += chip_entry["pad_size"]
-                unmerged[elink_basename]["pad_size_std"] += chip_entry["pad_size_std"]*np.sqrt(elink_share),
+                unmerged[elink_basename]["pad_size_std"] += chip_entry["pad_size_std"]*np.sqrt(elink_share)
                 unmerged[elink_basename]["padded_occupancy"] += chip_entry["padded_occupancy"]*elink_share
             # check if ready to merge
             if abs(unmerged[elink_basename]["share"]-1)<0.1:
@@ -235,6 +269,8 @@ def sort_data_to_elinks(data):
         if i["occupancy"]>95:
             print(i)
     assert len(unmerged)==0
+    # sort the data by basename
+    finished = list(sorted(finished, key=lambda x:(x["detid"], x["elink_id"])))
     return finished
 
 def read_data_from_txt(input_file_name):
@@ -401,6 +437,7 @@ def main():
             data = load_data_from_tree(t, config_name, args.ne)
         with open(pkl_filename, "wb") as f:
             pkl.dump(data, f)
+            print("pkl dumped at ", pkl_filename)
     if args.bychip:
         ylabel = "N(chips)"
     else:
