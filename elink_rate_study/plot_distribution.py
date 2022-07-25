@@ -399,7 +399,7 @@ def plot_distribution(data, distribution, args, labels=["all"], stack=True, conf
 def command_line():
     parser = argparse.ArgumentParser(prog="Plotter.")
     parser.add_argument("ntuple", type=str, help="root file that contains rate information.")
-    parser.add_argument("--config", type=str, default="../config/v5.config", help="config file as input.")
+    parser.add_argument("--config", type=str, default="../config/v8.config", help="config file as input.")
     parser.add_argument("--area", type=str, default="all", help="area of the detector to plot. Can be all, bydtc, bysection, TBPX_L1 etc.")
     parser.add_argument("--ne", type=int, default=1, help="number of events to be packed into the same stream, reduces padding needs. default=1.")
     parser.add_argument("--distribution", type=str, default="occupancy", help="distribution to plot, can be \"size\" or \"occupancy\".")

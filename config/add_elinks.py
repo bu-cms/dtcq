@@ -3,6 +3,16 @@ import os
 import argparse
 import re
 
+#############
+# This is the script that update on top of default.config with added e-links
+# The current version number is:
+VERSION = 8
+# including 1 e-link addtion to the certain sections (for each version):
+# v5 : TFPX R4, TEPX R1, TEPX R3 (as in v5.config)
+# v7 : v5 + TFPX R2, TFPX R3, TEPX R2, TEPX R4
+# v8 : v5 + TFPX R2, TEPX R4
+# v8 is the currently decided version
+
 def basename_to_module(basename):
     basename = basename.split("/")[-1] #remove parent dirs
     basename = basename.split(".")[0] #remove filetype
@@ -43,14 +53,14 @@ def module_to_layout(module):
 
 def commandline():
     parser = argparse.ArgumentParser(prog="formatter")
-    parser.add_argument("infile", type=str)
-    parser.add_argument("--output", type=str, default="out.config")
+    parser.add_argument("--input", type=str, default="default.config")
+    parser.add_argument("--output", type=str, default="v{}.config".format(VERSION))
     args = parser.parse_args()
     return args
 
 def main():
     args = commandline()
-    in_fn = args.infile
+    in_fn = args.input
     out_fn = args.output
     with open(in_fn) as input_file:
         with open(out_fn, "w") as output_file:
@@ -59,16 +69,16 @@ def main():
                 Section, Layer, Ring = module_to_layout(basename_to_module(basename))
                 if Section=="TEPX" and Ring==1:
                     share = "{:1.2f}".format(1.0)
-                if Section=="TEPX" and Ring==2 and ("chip2" in basename or "chip3" in basename):
-                    share = "{:1.2f}".format(1.0)
+                #if Section=="TEPX" and Ring==2 and ("chip2" in basename or "chip3" in basename):
+                #    share = "{:1.2f}".format(1.0)
                 if Section=="TEPX" and Ring==3:
                     share = "{:1.2f}".format(0.5)
                 if Section=="TEPX" and Ring==4:
                     share = "{:1.2f}".format(0.5)
                 if Section=="TFPX" and Ring==2 and "chip1" in basename:
                     share = "{:1.2f}".format(2.0)
-                if Section=="TFPX" and Ring==3 and ("chip2" in basename or "chip3" in basename):
-                    share = "{:1.2f}".format(1.0)
+                #if Section=="TFPX" and Ring==3 and ("chip2" in basename or "chip3" in basename):
+                #    share = "{:1.2f}".format(1.0)
                 if Section=="TFPX" and Ring==4 and float(share)==0.25:
                     share = "{:1.2f}".format(0.5)
                 new_line = "\t".join([basename, share, ne, size])
