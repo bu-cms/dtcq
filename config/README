@@ -7,4 +7,15 @@ Each line in the config file is a chip. The first column is a string containing 
 
 * default.config : corresponding the designed cabling map as of year 2021. Studies show that this would incur >100% link occupancy.
 * v5.config : add elinks to TEPX R1, R3, TFPX R4. Reduced link occupancy to these areas, but still see high occupancies in TEPX R2, R4, TFPX R2, R3.
-* v7.config : further add elinks to TEPX R2, R4, TFPX R2, R3.
+* v7.config : further add elinks to TEPX R2, R4, TFPX R2, R3. Talk based on this config: https://indico.cern.ch/event/1154888/#2-data-rates-in-the-inner-trac
+* v8.config : compared to default, add elinks to TEPX R1, R3, R4, TFPX R2, R4. Talk based on this config: https://indico.cern.ch/event/1186181/#2-e-link-data-rate-report-with
+
+### Summarize e-link configurations
+
+A script is provided to summarize e-link configurations. Execute by:
+```
+./summarize_config.py [config file]
+```
+Each line of output correspond to a TBPX layer or a TEPX/TFPX ring.
+Different columns correspond to different disks (as having different locations on z-axis).
+It is assumed that all modules within the same layer/ring and disk have the same number of links. If that is not true, this code won't work.
