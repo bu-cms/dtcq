@@ -16,6 +16,7 @@ A script is provided to summarize e-link configurations. Execute by:
 ```
 ./summarize_config.py [config file]
 ```
+It will print out the number of links per module in each detector sections.
 Each line of output correspond to a TBPX layer or a TEPX/TFPX ring.
 Different columns correspond to different disks (as having different locations on z-axis).
 It is assumed that all modules within the same layer/ring and disk have the same number of links. If that is not true, this code won't work.
