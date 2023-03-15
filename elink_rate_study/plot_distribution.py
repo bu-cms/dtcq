@@ -56,6 +56,7 @@ def module_to_layout(module):
     layout = (Section, Layer, Ring)
     return layout
 
+''' comment out unused functionality
 def read_data_from_config(config_file_name):
     data = []
     with open(config_file_name) as config:
@@ -74,6 +75,7 @@ def read_data_from_config(config_file_name):
                 "occupancy" : 100*elinks_occupancy,
                 })
     return data
+'''
 
 def load_data_from_tree(tree, config_file_name, NE=1):
     translate_dtc = lambda x : 11 + 10*((x-217)//7) + (x-217)%7
