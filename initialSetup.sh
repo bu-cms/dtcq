@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+git update-index --assume-unchanged initialSetup.sh
+git update-index --assume-unchanged initialSetup.csh
+
 mkdir env
 cd env
 
