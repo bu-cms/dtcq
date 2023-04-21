@@ -33,5 +33,5 @@
 
 # environment settings
 env
-initialSetup.sh
-setup.sh
+initialSetup.*sh
+setup.*sh
