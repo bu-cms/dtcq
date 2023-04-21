@@ -13,10 +13,12 @@ python -m pip install -e bucoffea
 pip install matplotlib==3.1
 pip install mplhep==0.1.5
 cd ..
-mv initialSetup.*sh env/
 
 echo 'source /cvmfs/sft.cern.ch/lcg/views/LCG_95apython3/x86_64-centos7-gcc8-opt/setup.csh' >> setup.csh
 echo 'setenv ENVNAME "bucoffeaenv"' >> setup.csh
 echo 'source ${ENVNAME}/bin/activate.csh' >> setup.csh
 echo 'setenv PYTHONPATH ${ENVNAME}/lib/python3.6/site-packages:$PYTHONPATH' >> setup.csh
+echo 'git update-index --assume-unchanged initialSetup.sh' >> setup.csh
+echo 'git update-index --assume-unchanged initialSetup.csh' >> setup.csh
 
+mv initialSetup.*sh env/
