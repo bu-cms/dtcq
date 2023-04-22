@@ -41,16 +41,17 @@ def load_elinks_nchips_mapping(config_file_name=None):
     debug = {}
     with open(config_file_name) as ifstream:
         for line in ifstream.readlines():
-            elements = line.replace("\n","").replace(" ","").split("\t")
-            assert len(elements) == 8
-            DTC_ID = int(elements[0])
-            N_ELinks = int(elements[1])
-            IsLongBarrel = int(elements[2])
-            Module_DetID = int(elements[3])
-            Section = section_naming_map[elements[4]]
-            Layer = int(elements[5])
-            Ring = int(elements[6])
-            NChips = int(elements[7])
+            elements = line.replace("\n","").replace(" ","").split(",")
+            if len(elements) == 1 : continue
+            assert len(elements) == 18, f"{len(elements)}"
+            DTC_ID = int(elements[2])
+            N_ELinks = int(elements[7])
+            IsLongBarrel = int(elements[10])
+            Module_DetID = int(elements[11])
+            Section = section_naming_map[elements[12]]
+            Layer = int(elements[13])
+            Ring = int(elements[14])
+            NChips = int(elements[16])
             key = (Section, Layer, Ring)
             val = (N_ELinks, NChips)
             if not key in m.keys():
@@ -104,7 +105,7 @@ def module_to_layout(module):
         Section = "TBPX"
         Layer = layer
         Ring = abs(module-5)+1
-    elif dtc_id%10 == 6 or dtc_id%10 == 7: 
+    elif disk > 8: 
         Section = "TEPX"
         Layer = disk - 8
         Ring = layer
@@ -128,7 +129,7 @@ def rank_module_by_elinks(module_mapping, layout_to_elinks_nchips_mapping):
 
 
 def get_elinks_assignment(nelinks, nchips):
-    assert (nelinks,nchips) in [(6,2), (2,2), (3,2), (2,4), (3,4), (1,4)]
+    assert (nelinks,nchips) in [(6,2), (2,2), (3,2), (2,4), (3,4), (1,4), (4,4)]
     if nelinks==3 and nchips==2:
         return [2,1]
     elif nelinks==3 and nchips==4:
