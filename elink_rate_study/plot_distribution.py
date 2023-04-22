@@ -14,7 +14,7 @@ from collections import defaultdict
 
 mpl.rcParams['axes.prop_cycle'] = cycler("color", plt.get_cmap("tab20c").colors)
 
-plt.style.use(hep.style.CMS)
+# plt.style.use(hep.style.CMS) #FIXME somehow matplotlib needs to be differently imported than before
 
 newassignment=True
 
